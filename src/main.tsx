@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   ChevronLeft,
+  ChartNoAxesCombined,
   CircleDot,
   File,
   Folder,
@@ -47,6 +48,13 @@ type RemoteEntry = {
 };
 type RemoteFile = { path: string; content: string; truncated: boolean };
 type TailChunk = { streamId: number; chunk: string };
+type LogSource = { path: string; content: string };
+type TracingRecord = {
+  timestamp: string;
+  level: string;
+  target: string;
+  message: string;
+};
 const emptyProfile = (): Profile => ({
   id: crypto.randomUUID(),
   name: "",
@@ -99,6 +107,12 @@ function App() {
   function closeSession(id: string) {
     setTabs((all) => all.filter((tab) => tab.id !== id));
     if (id === activeId) setActiveId("home");
+  }
+  function openAnalysis() {
+    const found = tabs.find((tab) => tab.id === "analysis");
+    if (!found)
+      setTabs((all) => [...all, { id: "analysis", title: "분석" }]);
+    setActiveId("analysis");
   }
   function removeProfile(profile: Profile) {
     if (!window.confirm(`저장된 세션 “${profile.name}”을 삭제할까요?`)) return;
@@ -229,6 +243,9 @@ function App() {
           <button onClick={() => setActiveId("home")}>
             <MonitorCog size={16} /> 홈
           </button>
+          <button onClick={openAnalysis}>
+            <ChartNoAxesCombined size={16} /> 분석
+          </button>
           <button>
             <ShieldCheck size={16} /> 보안 상태
           </button>
@@ -244,6 +261,8 @@ function App() {
             >
               {tab.profileId ? (
                 <FolderOpen size={15} />
+              ) : tab.id === "analysis" ? (
+                <ChartNoAxesCombined size={15} />
               ) : (
                 <MonitorCog size={15} />
               )}
@@ -266,6 +285,8 @@ function App() {
             onCheck={() => check(activeProfile)}
             notify={setNotice}
           />
+        ) : activeId === "analysis" ? (
+          <Analysis profiles={profiles} notify={setNotice} />
         ) : (
           <Home open={openProfile} profiles={profiles} />
         )}
@@ -665,6 +686,134 @@ function Browser({
           </pre>
         </section>
       )}
+    </section>
+  );
+}
+
+function parseTracing(content: string): TracingRecord[] {
+  const ansi = /\u001b\[[0-9;]*m/g;
+  return content.split("\n").flatMap((raw) => {
+    const line = raw.replace(ansi, "");
+    const match = line.match(
+      /^(\d{4}-\d{2}-\d{2}T\S+)\s+(TRACE|DEBUG|INFO|WARN|ERROR)\s+(.+?):\s+(.*)$/,
+    );
+    if (!match) return [];
+    return [
+      {
+        timestamp: match[1],
+        level: match[2],
+        target: match[3],
+        message: match[4],
+      },
+    ];
+  });
+}
+
+function Analysis({
+  profiles,
+  notify,
+}: {
+  profiles: Profile[];
+  notify: (text: string) => void;
+}) {
+  const [profileId, setProfileId] = useState("");
+  const [path, setPath] = useState(".");
+  const [entries, setEntries] = useState<RemoteEntry[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [records, setRecords] = useState<TracingRecord[]>([]);
+  const [scanning, setScanning] = useState(false);
+  const profile = profiles.find((item) => item.id === profileId);
+  const logFiles = entries.filter((entry) => !entry.isDir && /\.log(?:\.\d+)?$/i.test(entry.name));
+  const levelCounts = records.reduce<Record<string, number>>((counts, record) => {
+    counts[record.level] = (counts[record.level] ?? 0) + 1;
+    return counts;
+  }, {});
+  const targetCounts = records.reduce<Record<string, number>>((counts, record) => {
+    counts[record.target] = (counts[record.target] ?? 0) + 1;
+    return counts;
+  }, {});
+  const sources = Object.entries(targetCounts).sort(([, a], [, b]) => b - a);
+
+  async function loadFiles() {
+    if (!profile) return;
+    setScanning(true);
+    try {
+      const result = await invoke<RemoteEntry[]>("list_remote_directory", { profile, path });
+      setEntries(result);
+      setSelected((current) => current.filter((item) => result.some((entry) => entry.path === item)));
+      notify(`${result.filter((entry) => !entry.isDir && /\.log(?:\.\d+)?$/i.test(entry.name)).length}개의 로그 파일을 찾았습니다.`);
+    } catch (error) {
+      notify(`로그 목록을 읽지 못했습니다: ${String(error)}`);
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  async function analyze() {
+    if (!profile || selected.length === 0) return;
+    setScanning(true);
+    try {
+      const files = await invoke<LogSource[]>("read_remote_log_files", {
+        profile,
+        paths: selected,
+      });
+      const parsed = files.flatMap((file) => parseTracing(file.content));
+      setRecords(parsed);
+      notify(`${files.length}개 파일에서 tracing 로그 ${parsed.length}건을 분석했습니다.`);
+    } catch (error) {
+      notify(`로그 분석에 실패했습니다: ${String(error)}`);
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  return (
+    <section className="analysis-view">
+      <header className="analysis-header">
+        <div>
+          <p>TRACING LOG ANALYSIS</p>
+          <h1>원격 로그 분석</h1>
+          <span>세션과 .log 파일을 선택하면 tracing의 레벨과 코드 모듈을 집계합니다.</span>
+        </div>
+      </header>
+      <section className="analysis-controls">
+        <label>
+          세션
+          <select value={profileId} onChange={(event) => { setProfileId(event.target.value); setEntries([]); setSelected([]); setRecords([]); }}>
+            <option value="">세션 선택</option>
+            {profiles.map((item) => <option key={item.id} value={item.id}>{item.name} — {item.username}@{item.host}</option>)}
+          </select>
+        </label>
+        <label className="analysis-path">
+          로그 폴더
+          <input value={path} onChange={(event) => setPath(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void loadFiles()} placeholder="예: /var/log/service" />
+        </label>
+        <button className="primary" disabled={!profile || scanning} onClick={() => void loadFiles()}>파일 찾기</button>
+      </section>
+      <div className="analysis-layout">
+        <section className="analysis-files card">
+          <header><h2>분석 대상 로그</h2><span>{selected.length}개 선택</span></header>
+          {logFiles.length === 0 ? <p className="analysis-empty">세션과 폴더를 선택한 뒤 “파일 찾기”를 누르세요. 현재 폴더의 .log 파일만 표시됩니다.</p> : logFiles.map((file) => (
+            <label className="log-file-choice" key={file.path}>
+              <input type="checkbox" checked={selected.includes(file.path)} onChange={(event) => setSelected((items) => event.target.checked ? [...items, file.path] : items.filter((item) => item !== file.path))} />
+              <span><b>{file.name}</b><small>{file.details}</small></span>
+            </label>
+          ))}
+          <button className="primary analyze-button" disabled={!profile || selected.length === 0 || scanning} onClick={() => void analyze()}>{scanning ? "분석 중…" : "선택 파일 분석"}</button>
+          <small className="analysis-limit">각 파일의 최신 5,000줄만 읽습니다.</small>
+        </section>
+        <section className="analysis-results">
+          <div className="metric-row">
+            <article className="metric"><span>분석된 로그</span><strong>{records.length.toLocaleString()}</strong></article>
+            {Object.entries(levelCounts).map(([level, count]) => <article className={`metric level-${level.toLowerCase()}`} key={level}><span>{level}</span><strong>{count.toLocaleString()}</strong></article>)}
+          </div>
+          <section className="card source-table">
+            <header><h2>코드 위치별 로그</h2><span>target / module path</span></header>
+            {sources.length === 0 ? <p className="analysis-empty">분석 결과가 여기에 표시됩니다.</p> : <div>{sources.map(([target, count]) => <div className="source-row" key={target}><code>{target}</code><b>{count.toLocaleString()}건</b></div>)}</div>}
+          </section>
+          {records.length > 0 && <section className="card sample-table"><header><h2>최근 로그 예시</h2></header>{records.slice(-20).reverse().map((record, index) => <div className="sample-row" key={`${record.timestamp}-${index}`}><time>{record.timestamp}</time><em className={record.level.toLowerCase()}>{record.level}</em><code>{record.target}</code><span>{record.message}</span></div>)}</section>}
+        </section>
+      </div>
     </section>
   );
 }

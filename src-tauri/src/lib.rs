@@ -62,6 +62,13 @@ struct RemoteFile {
     truncated: bool,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LogSource {
+    path: String,
+    content: String,
+}
+
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct TailChunk {
@@ -334,6 +341,59 @@ fn read_remote_file(
 }
 
 #[tauri::command]
+fn read_remote_log_files(
+    profile: ConnectionProfile,
+    paths: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<LogSource>, String> {
+    if profile.auth_kind == "password" {
+        return Err("비밀번호 방식의 로그 분석은 아직 지원되지 않습니다.".into());
+    }
+    if paths.is_empty() {
+        return Ok(Vec::new());
+    }
+    if paths.len() > 10 {
+        return Err("한 번에 분석할 수 있는 로그 파일은 최대 10개입니다.".into());
+    }
+
+    let mut files = Vec::with_capacity(paths.len());
+    for path in paths {
+        if path.contains(['\r', '\n', '\0']) {
+            return Err("유효하지 않은 원격 경로입니다.".into());
+        }
+        let escaped_path = path
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('$', "\\$")
+            .replace('`', "\\`");
+        // Keep analysis bounded: enough recent context for patterns without
+        // transferring an entire production log into the webview.
+        let remote_command = format!("tail -n 5000 -- \"{escaped_path}\"");
+        let mut command = Command::new("ssh");
+        append_ssh_auth_args(&mut command, &profile, &state.known_hosts_file)?;
+        command
+            .arg(format!("{}@{}", profile.username, profile.host))
+            .arg(remote_command);
+        let output = command
+            .output()
+            .map_err(|error| format!("Windows OpenSSH를 실행하지 못했습니다: {error}"))?;
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(if error.is_empty() {
+                format!("원격 로그 파일을 읽지 못했습니다: {path}")
+            } else {
+                error
+            });
+        }
+        files.push(LogSource {
+            path,
+            content: String::from_utf8_lossy(&output.stdout).to_string(),
+        });
+    }
+    Ok(files)
+}
+
+#[tauri::command]
 fn start_tail_stream(
     profile: ConnectionProfile,
     path: String,
@@ -429,6 +489,7 @@ pub fn run() {
             check_ssh_connection,
             list_remote_directory,
             read_remote_file,
+            read_remote_log_files,
             start_tail_stream,
             stop_tail_stream
         ])

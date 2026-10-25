@@ -437,11 +437,35 @@ function Browser({
   const [preview, setPreview] = useState<RemoteFile | null>(null);
   const [streamId, setStreamId] = useState<number | null>(null);
   const requestInProgress = useRef(false);
+  const queuedNavigation = useRef<(() => void) | null>(null);
+  const directoryCache = useRef(
+    new Map<string, { entries: RemoteEntry[]; readAt: number }>(),
+  );
   const entriesHash = useRef("");
   const previewStickToBottom = useRef(true);
   const previewScroll = useRef<HTMLPreElement>(null);
   async function load(next: string, saveHistory: boolean, silent = false) {
-    if (requestInProgress.current) return;
+    if (requestInProgress.current) {
+      if (!silent)
+        queuedNavigation.current = () => {
+          void load(next, saveHistory);
+        };
+      return;
+    }
+    const cached = directoryCache.current.get(next);
+    if (cached) {
+      entriesHash.current = cached.entries
+        .map((entry) => `${entry.path}|${entry.details}`)
+        .join("\n");
+      setEntries(cached.entries);
+      setLoaded(true);
+      if (saveHistory && next !== path) setHistory((items) => [...items, path]);
+      setPath(next);
+      // Recent directory listings are safe to reuse immediately. A later poll
+      // refreshes them without blocking navigation.
+      if (Date.now() - cached.readAt < 8_000) return;
+      silent = true;
+    }
     requestInProgress.current = true;
     if (!silent) {
       setLoading(true);
@@ -459,7 +483,9 @@ function Browser({
         entriesHash.current = hash;
         setEntries(result);
       }
-      if (saveHistory && next !== path) setHistory((items) => [...items, path]);
+      directoryCache.current.set(next, { entries: result, readAt: Date.now() });
+      if (!cached && saveHistory && next !== path)
+        setHistory((items) => [...items, path]);
       setPath(next);
       if (!silent)
         notify(`${next} 폴더에서 ${result.length}개 항목을 읽었습니다.`);
@@ -468,13 +494,16 @@ function Browser({
     } finally {
       if (!silent) setLoading(false);
       requestInProgress.current = false;
+      const queued = queuedNavigation.current;
+      queuedNavigation.current = null;
+      queued?.();
     }
   }
   useEffect(() => {
     if (!loaded || !active) return;
     const timer = window.setInterval(() => {
       void load(path, false, true);
-    }, 2000);
+    }, 8_000);
     return () => window.clearInterval(timer);
   }, [active, loaded, path, profile]);
   useEffect(() => {

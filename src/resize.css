@@ -1,0 +1,26 @@
+.dock-resize-handle {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 8px;
+  cursor: ns-resize;
+  background: #22313e;
+  border-bottom: 1px solid #3b556a;
+}
+.dock-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: calc(50% - 20px);
+  width: 40px;
+  height: 2px;
+  border-radius: 4px;
+  background: #7390a5;
+}
+.dock-resize-handle:hover,
+.dock-resize-handle:active {
+  background: #2c4657;
+}
+.dock-resize-handle:hover::after,
+.dock-resize-handle:active::after {
+  background: #70d7ad;
+}

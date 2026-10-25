@@ -82,9 +82,6 @@ function App() {
       .catch(() => undefined);
   }, []);
   const active = tabs.find((tab) => tab.id === activeId) ?? tabs[0];
-  const activeProfile = active.profileId
-    ? profiles.find((profile) => profile.id === active.profileId)
-    : undefined;
   const shown = profiles.filter((profile) =>
     `${profile.name} ${profile.host} ${profile.group}`
       .toLowerCase()
@@ -279,16 +276,30 @@ function App() {
             </button>
           ))}
         </nav>
-        {activeProfile ? (
-          <Browser
-            profile={activeProfile}
-            onCheck={() => check(activeProfile)}
-            notify={setNotice}
-          />
-        ) : activeId === "analysis" ? (
-          <Analysis profiles={profiles} notify={setNotice} />
-        ) : (
-          <Home open={openProfile} profiles={profiles} />
+        {activeId === "home" && <Home open={openProfile} profiles={profiles} />}
+        {tabs
+          .filter((tab) => tab.profileId)
+          .flatMap((tab) => {
+            const profile = profiles.find((item) => item.id === tab.profileId);
+            if (!profile) return [];
+            return (
+              <div
+                className={tab.id === activeId ? "tab-view" : "tab-view hidden"}
+                key={tab.id}
+              >
+                <Browser
+                  profile={profile}
+                  active={tab.id === activeId}
+                  onCheck={() => check(profile)}
+                  notify={setNotice}
+                />
+              </div>
+            );
+          })}
+        {tabs.some((tab) => tab.id === "analysis") && (
+          <div className={activeId === "analysis" ? "tab-view" : "tab-view hidden"}>
+            <Analysis profiles={profiles} notify={setNotice} />
+          </div>
         )}
       </section>
       <div className="notice">{notice}</div>
@@ -413,10 +424,12 @@ function LogContent({ content }: { content: string }) {
 
 function Browser({
   profile,
+  active,
   onCheck,
   notify,
 }: {
   profile: Profile;
+  active: boolean;
   onCheck: () => void;
   notify: (text: string) => void;
 }) {
@@ -462,12 +475,12 @@ function Browser({
     }
   }
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || !active) return;
     const timer = window.setInterval(() => {
       void load(path, false, true);
     }, 2000);
     return () => window.clearInterval(timer);
-  }, [loaded, path, profile]);
+  }, [active, loaded, path, profile]);
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     void listen<TailChunk>("tail-chunk", (event) => {

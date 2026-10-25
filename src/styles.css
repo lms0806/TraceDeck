@@ -225,6 +225,14 @@ button {
   display: flex;
   flex-direction: column;
 }
+.tab-view {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+}
+.tab-view.hidden {
+  display: none;
+}
 .tabs {
   height: 42px;
   background: #151e28;

@@ -735,6 +735,7 @@ function Analysis({
   const [entries, setEntries] = useState<RemoteEntry[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [records, setRecords] = useState<TracingRecord[]>([]);
+  const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
   const [scanning, setScanning] = useState(false);
   const profile = profiles.find((item) => item.id === profileId);
   const logFiles = entries.filter((entry) => !entry.isDir && isLogFileName(entry.name));
@@ -742,7 +743,10 @@ function Analysis({
     counts[record.level] = (counts[record.level] ?? 0) + 1;
     return counts;
   }, {});
-  const targetCounts = records.reduce<Record<string, number>>((counts, record) => {
+  const visibleRecords = selectedLevels.length
+    ? records.filter((record) => selectedLevels.includes(record.level))
+    : records;
+  const targetCounts = visibleRecords.reduce<Record<string, number>>((counts, record) => {
     counts[record.target] = (counts[record.target] ?? 0) + 1;
     return counts;
   }, {});
@@ -775,6 +779,7 @@ function Analysis({
       });
       const parsed = files.flatMap((file) => parseTracing(file.content));
       setRecords(parsed);
+      setSelectedLevels([]);
       notify(`${files.length}개 파일에서 tracing 로그 ${parsed.length}건을 분석했습니다.`);
     } catch (error) {
       notify(`로그 분석에 실패했습니다: ${String(error)}`);
@@ -820,14 +825,15 @@ function Analysis({
         </section>
         <section className="analysis-results">
           <div className="metric-row">
-            <article className="metric"><span>분석된 로그</span><strong>{records.length.toLocaleString()}</strong></article>
-            {Object.entries(levelCounts).map(([level, count]) => <article className={`metric level-${level.toLowerCase()}`} key={level}><span>{level}</span><strong>{count.toLocaleString()}</strong></article>)}
+            <article className="metric"><span>{selectedLevels.length ? "표시 로그" : "분석된 로그"}</span><strong>{visibleRecords.length.toLocaleString()}</strong></article>
+            {Object.entries(levelCounts).map(([level, count]) => <button className={selectedLevels.includes(level) ? `metric level-${level.toLowerCase()} selected-level` : `metric level-${level.toLowerCase()}`} key={level} aria-pressed={selectedLevels.includes(level)} onClick={() => setSelectedLevels((levels) => levels.includes(level) ? levels.filter((item) => item !== level) : [...levels, level])}><span>{level}</span><strong>{count.toLocaleString()}</strong></button>)}
           </div>
+          {selectedLevels.length > 0 && <div className="level-filter-note"><span>{selectedLevels.join(", ")} 로그만 표시 중</span><button onClick={() => setSelectedLevels([])}>필터 해제</button></div>}
           <section className="card source-table">
             <header><h2>코드 위치별 로그</h2><span>target / module path</span></header>
             {sources.length === 0 ? <p className="analysis-empty">분석 결과가 여기에 표시됩니다.</p> : <div>{sources.map(([target, count]) => <div className="source-row" key={target}><code>{target}</code><b>{count.toLocaleString()}건</b></div>)}</div>}
           </section>
-          {records.length > 0 && <section className="card sample-table"><header><h2>최근 로그 예시</h2></header>{records.slice(-20).reverse().map((record, index) => <div className="sample-row" key={`${record.timestamp}-${index}`}><time>{record.timestamp}</time><em className={record.level.toLowerCase()}>{record.level}</em><code>{record.target}</code><span>{record.message}</span></div>)}</section>}
+          {visibleRecords.length > 0 && <section className="card sample-table"><header><h2>최근 로그 예시</h2></header>{visibleRecords.slice(-20).reverse().map((record, index) => <div className="sample-row" key={`${record.timestamp}-${index}`}><time>{record.timestamp}</time><em className={record.level.toLowerCase()}>{record.level}</em><code>{record.target}</code><span>{record.message}</span></div>)}</section>}
         </section>
       </div>
     </section>

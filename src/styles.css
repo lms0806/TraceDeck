@@ -311,11 +311,16 @@ button {
 .analysis-limit { display: block; margin-top: 9px; color: #72899b; font-size: 10px; }
 .metric-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
 .metric { min-width: 110px; padding: 13px; border: 1px solid #2d3d4c; border-radius: 8px; background: #17212b; }
+.metric:is(button) { text-align: left; transition: border-color .15s, background .15s; }
+.metric:is(button):hover { background: #21303c; }
+.metric.selected-level { border-color: #58d6a5; background: #1a3b35; box-shadow: inset 0 0 0 1px #58d6a540; }
 .metric span { display: block; color: #90a4b5; font-size: 10px; font-weight: 700; }
 .metric strong { display: block; margin-top: 5px; color: #e7f4fb; font-size: 21px; }
 .level-error { border-color: #6a343b; } .level-error strong { color: #fa9893; }
 .level-warn { border-color: #705621; } .level-warn strong { color: #e7b65e; }
 .level-info { border-color: #2b6251; } .level-info strong { color: #6fd1aa; }
+.level-filter-note { display: flex; align-items: center; justify-content: space-between; margin: -7px 0 16px; color: #90bfae; font-size: 11px; }
+.level-filter-note button { border: 0; background: transparent; color: #78dba9; text-decoration: underline; font-size: 11px; }
 .source-table, .sample-table { margin-bottom: 16px; }
 .source-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #293947; }
 .source-row:last-child { border-bottom: 0; }

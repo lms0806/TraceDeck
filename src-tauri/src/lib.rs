@@ -273,6 +273,56 @@ fn list_remote_directory(
     Ok(entries)
 }
 
+#[tauri::command]
+fn find_remote_log_files(
+    profile: ConnectionProfile,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<RemoteEntry>, String> {
+    if profile.auth_kind == "password" {
+        return Err("비밀번호 방식의 로그 탐색은 아직 지원되지 않습니다.".into());
+    }
+    if path.contains(['\r', '\n', '\0']) {
+        return Err("유효하지 않은 원격 경로입니다.".into());
+    }
+    let escaped_path = path
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('$', "\\$")
+        .replace('`', "\\`");
+    // Production logs are commonly rotated as .log.1, .log-YYYYMMDD, etc.
+    // Limit both tree depth and result count to keep the UI responsive.
+    let remote_command = format!(
+        "find -- \"{escaped_path}\" -maxdepth 3 -type f \\(-iname '*.log' -o -iname '*.log.*' -o -iname '*.log-*' \\) -print | head -n 200"
+    );
+    let mut command = Command::new("ssh");
+    append_ssh_auth_args(&mut command, &profile, &state.known_hosts_file)?;
+    command
+        .arg(format!("{}@{}", profile.username, profile.host))
+        .arg(remote_command);
+    let output = command
+        .output()
+        .map_err(|error| format!("Windows OpenSSH를 실행하지 못했습니다: {error}"))?;
+    if !output.status.success() {
+        let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if error.is_empty() {
+            "원격 로그 파일을 찾지 못했습니다.".into()
+        } else {
+            error
+        });
+    }
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter(|item| !item.is_empty())
+        .map(|item| RemoteEntry {
+            name: item.rsplit('/').next().unwrap_or(item).to_string(),
+            path: item.to_string(),
+            is_dir: false,
+            details: "로그 파일".into(),
+        })
+        .collect())
+}
+
 fn append_ssh_auth_args(
     command: &mut Command,
     profile: &ConnectionProfile,
@@ -488,6 +538,7 @@ pub fn run() {
             delete_profile,
             check_ssh_connection,
             list_remote_directory,
+            find_remote_log_files,
             read_remote_file,
             read_remote_log_files,
             start_tail_stream,

@@ -55,6 +55,7 @@ type TracingRecord = {
   target: string;
   message: string;
 };
+const isLogFileName = (name: string) => /\.log(?:[._-].*)?$/i.test(name);
 const emptyProfile = (): Profile => ({
   id: crypto.randomUUID(),
   name: "",
@@ -736,7 +737,7 @@ function Analysis({
   const [records, setRecords] = useState<TracingRecord[]>([]);
   const [scanning, setScanning] = useState(false);
   const profile = profiles.find((item) => item.id === profileId);
-  const logFiles = entries.filter((entry) => !entry.isDir && /\.log(?:\.\d+)?$/i.test(entry.name));
+  const logFiles = entries.filter((entry) => !entry.isDir && isLogFileName(entry.name));
   const levelCounts = records.reduce<Record<string, number>>((counts, record) => {
     counts[record.level] = (counts[record.level] ?? 0) + 1;
     return counts;
@@ -754,7 +755,9 @@ function Analysis({
       const result = await invoke<RemoteEntry[]>("list_remote_directory", { profile, path });
       setEntries(result);
       setSelected((current) => current.filter((item) => result.some((entry) => entry.path === item)));
-      notify(`${result.filter((entry) => !entry.isDir && /\.log(?:\.\d+)?$/i.test(entry.name)).length}개의 로그 파일을 찾았습니다.`);
+      notify(
+        `${result.filter((entry) => !entry.isDir && isLogFileName(entry.name)).length}개의 로그 파일을 찾았습니다.`,
+      );
     } catch (error) {
       notify(`로그 목록을 읽지 못했습니다: ${String(error)}`);
     } finally {
@@ -806,7 +809,7 @@ function Analysis({
       <div className="analysis-layout">
         <section className="analysis-files card">
           <header><h2>분석 대상 로그</h2><span>{selected.length}개 선택</span></header>
-          {logFiles.length === 0 ? <p className="analysis-empty">세션과 폴더를 선택한 뒤 “파일 찾기”를 누르세요. 현재 폴더의 .log 파일만 표시됩니다.</p> : logFiles.map((file) => (
+          {logFiles.length === 0 ? <p className="analysis-empty">세션과 로그 폴더를 선택한 뒤 “파일 찾기”를 누르세요. 해당 폴더 안의 .log 및 회전 로그 파일을 체크해 여러 개 선택할 수 있습니다.</p> : logFiles.map((file) => (
             <label className="log-file-choice" key={file.path}>
               <input type="checkbox" checked={selected.includes(file.path)} onChange={(event) => setSelected((items) => event.target.checked ? [...items, file.path] : items.filter((item) => item !== file.path))} />
               <span><b>{file.name}</b><small>{file.details}</small></span>

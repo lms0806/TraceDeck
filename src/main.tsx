@@ -21,11 +21,6 @@ import {
   X,
 } from "lucide-react";
 import "./styles.css";
-import "./remote.css";
-import "./preview.css";
-import "./dock.css";
-import "./logcolors.css";
-import "./resize.css";
 
 type AuthKind = "password" | "privateKey" | "agent";
 type Profile = {

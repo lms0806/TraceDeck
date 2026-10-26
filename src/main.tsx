@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -53,6 +53,8 @@ function App() {
   const [profiles, setProfiles] = useState(initialProfiles);
   const [tabs, setTabs] = useState<Tab[]>([{ id: "home", title: "Home" }]);
   const [activeId, setActiveId] = useState("home");
+  const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
+  const tabDrag = useRef<{ id: string; startX: number } | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState(
@@ -88,6 +90,45 @@ function App() {
   function closeSession(id: string) {
     setTabs((all) => all.filter((tab) => tab.id !== id));
     if (id === activeId) setActiveId("home");
+  }
+  function moveTab(draggedId: string, targetId: string, insertAfter: boolean) {
+    if (draggedId === targetId || draggedId === "home") return;
+    setTabs((current) => {
+      const dragged = current.find((tab) => tab.id === draggedId);
+      if (!dragged) return current;
+      const withoutDragged = current.filter((tab) => tab.id !== draggedId);
+      const targetIndex = withoutDragged.findIndex(
+        (tab) => tab.id === targetId,
+      );
+      const insertAt =
+        targetId === "home" ? 1 : targetIndex + Number(insertAfter);
+      if (insertAt < 0) return current;
+      return [
+        ...withoutDragged.slice(0, insertAt),
+        dragged,
+        ...withoutDragged.slice(insertAt),
+      ];
+    });
+  }
+  function startTabDrag(id: string, startX: number) {
+    if (id !== "home") tabDrag.current = { id, startX };
+  }
+  function updateTabDrag(clientX: number, clientY: number) {
+    const drag = tabDrag.current;
+    if (!drag || Math.abs(clientX - drag.startX) < 6) return;
+    setDraggedTabId(drag.id);
+    const target = document
+      .elementFromPoint(clientX, clientY)
+      ?.closest<HTMLButtonElement>("[data-tab-id]");
+    const targetId = target?.dataset.tabId;
+    if (targetId) {
+      const bounds = target.getBoundingClientRect();
+      moveTab(drag.id, targetId, clientX > bounds.left + bounds.width / 2);
+    }
+  }
+  function endTabDrag() {
+    tabDrag.current = null;
+    setDraggedTabId(null);
   }
   function openAnalysis() {
     const found = tabs.find((tab) => tab.id === "analysis");
@@ -235,9 +276,23 @@ function App() {
         <nav className="tabs">
           {tabs.map((tab) => (
             <button
-              className={tab.id === activeId ? "tab active" : "tab"}
+              className={
+                tab.id === activeId
+                  ? `tab active${draggedTabId === tab.id ? " dragging" : ""}`
+                  : `tab${draggedTabId === tab.id ? " dragging" : ""}`
+              }
               key={tab.id}
               onClick={() => setActiveId(tab.id)}
+              data-tab-id={tab.id}
+              onPointerDown={(event) => {
+                event.currentTarget.setPointerCapture(event.pointerId);
+                startTabDrag(tab.id, event.clientX);
+              }}
+              onPointerMove={(event) =>
+                updateTabDrag(event.clientX, event.clientY)
+              }
+              onPointerUp={endTabDrag}
+              onPointerCancel={endTabDrag}
             >
               {tab.profileId ? (
                 <FolderOpen size={15} />
@@ -247,7 +302,7 @@ function App() {
                 <MonitorCog size={15} />
               )}
               {tab.title}
-              {tab.profileId && (
+              {tab.id !== "home" && (
                 <X
                   size={14}
                   onClick={(event) => {

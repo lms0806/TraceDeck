@@ -260,6 +260,16 @@ button {
   padding: 0 13px;
   color: #91a7b9;
 }
+.tab[data-tab-id]:not([data-tab-id="home"]) {
+  cursor: grab;
+}
+.tab.dragging {
+  cursor: grabbing;
+  opacity: 0.45;
+}
+.tab[data-tab-id]:not([data-tab-id="home"]):active {
+  cursor: grabbing;
+}
 .tab.active {
   color: #f2f7fb;
   background: #111820;

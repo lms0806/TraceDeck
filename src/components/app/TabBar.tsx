@@ -37,13 +37,13 @@ export function TabBar({
     );
   }
   return (
-    <nav className="tabs">
+    <nav className="flex h-[42px] overflow-auto border-b border-[#293846] bg-[#151e28]">
       {tabs.map((tab) => (
         <button
           className={
             tab.id === activeId
-              ? `tab active${draggedId === tab.id ? " dragging" : ""}`
-              : `tab${draggedId === tab.id ? " dragging" : ""}`
+              ? `flex min-w-[145px] items-center gap-[7px] border-0 border-r border-[#293846] bg-[#111820] px-[13px] text-[#f2f7fb] shadow-[inset_0_2px_#50d3a1] ${draggedId === tab.id ? "cursor-grabbing opacity-45" : tab.id !== "home" ? "cursor-grab active:cursor-grabbing" : ""}`
+              : `flex min-w-[145px] items-center gap-[7px] border-0 border-r border-[#293846] bg-[#151e28] px-[13px] text-[#91a7b9] ${draggedId === tab.id ? "cursor-grabbing opacity-45" : tab.id !== "home" ? "cursor-grab active:cursor-grabbing" : ""}`
           }
           key={tab.id}
           onClick={() => onActivate(tab.id)}
@@ -67,6 +67,7 @@ export function TabBar({
           {tab.title}
           {tab.id !== "home" && (
             <X
+              className="ml-auto"
               size={14}
               onClick={(event) => {
                 event.stopPropagation();

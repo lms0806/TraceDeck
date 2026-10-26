@@ -15,10 +15,9 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      "react-refresh/only-export-components": [
-        "warn",
-        { allowConstantExport: true },
-      ],
+      // This desktop app's entry file renders directly instead of exporting a
+      // component module, so this Fast Refresh heuristic does not apply.
+      "react-refresh/only-export-components": "off",
     },
   },
 );

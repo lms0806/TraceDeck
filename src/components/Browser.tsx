@@ -15,6 +15,7 @@ function LogContent({ content }: { content: string }) {
     const segments: { text: string; style: CSSProperties }[] = [];
     let cursor = 0;
     let style: CSSProperties = { color: "#d0e0ec" };
+    // eslint-disable-next-line no-control-regex -- ANSI SGR sequences from terminal output.
     const pattern = /\u001b\[([0-9;]*)m/g;
     let match: RegExpExecArray | null;
     while ((match = pattern.exec(line))) {
@@ -75,6 +76,8 @@ export function Browser({ profile, active, onCheck, notify }: { profile: Profile
     } catch (error) { if (!silent) notify(`SFTP 폴더를 열지 못했습니다: ${String(error)}`); }
     finally { if (!silent) setLoading(false); requestInProgress.current = false; const queued = queuedNavigation.current; queuedNavigation.current = null; queued?.(); }
   }
+  // load deliberately owns mutable request and cache refs; recreating it would reset navigation behavior.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (!loaded || !active) return; const timer = window.setInterval(() => { void load(path, false, true); }, 8_000); return () => window.clearInterval(timer); }, [active, loaded, path, profile]);
   useEffect(() => { let unlisten: (() => void) | undefined; void listen<TailChunk>("tail-chunk", (event) => { if (event.payload.streamId !== streamId) return; setPreview((current) => { if (!current) return current; const lines = `${current.content}${event.payload.chunk}`.split("\n"); return { ...current, content: lines.slice(-2000).join("\n") }; }); }).then((stop) => { unlisten = stop; }); return () => { unlisten?.(); }; }, [streamId]);
   useEffect(() => () => { if (streamId !== null) void invoke("stop_tail_stream", { streamId }); }, [streamId]);

@@ -1,7 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   ChartNoAxesCombined,
@@ -37,8 +36,6 @@ type RemoteEntry = {
   isDir: boolean;
   details: string;
 };
-type RemoteFile = { path: string; content: string; truncated: boolean };
-type TailChunk = { streamId: number; chunk: string };
 type LogSource = { path: string; content: string };
 type TracingRecord = {
   timestamp: string;
@@ -348,7 +345,8 @@ function Home({
 }
 
 function parseTracing(content: string): TracingRecord[] {
-  const ansi = /\u001b\[[0-9;]*m/g;
+    // eslint-disable-next-line no-control-regex -- ANSI SGR sequences from tracing output.
+    const ansi = /\u001b\[[0-9;]*m/g;
   return content.split("\n").flatMap((raw) => {
     const line = raw.replace(ansi, "");
     const match = line.match(

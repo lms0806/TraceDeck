@@ -8,6 +8,7 @@ import { Browser } from "./components/Browser";
 import { Sidebar } from "./components/app/Sidebar";
 import { TabBar } from "./components/app/TabBar";
 import { Panel } from "./components/ui/Panel";
+import { IconButton } from "./components/ui/IconButton";
 import { PrimaryButton } from "./components/ui/PrimaryButton";
 import { parseTracing, type TracingRecord } from "./logging/tracing";
 
@@ -540,9 +541,12 @@ function SessionDialog({
             </p>
             <h2>원격 서버 추가</h2>
           </div>
-          <button type="button" onClick={close}>
+          <IconButton
+            className="text-[#91a5b6] hover:bg-transparent"
+            onClick={close}
+          >
             <X size={18} />
-          </button>
+          </IconButton>
         </header>
         <label>
           세션 이름

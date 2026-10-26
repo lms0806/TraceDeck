@@ -1,6 +1,8 @@
 import { CSSProperties, useEffect, useRef } from "react";
 import { File, X } from "lucide-react";
 
+import { IconButton } from "../ui/IconButton";
+
 import type { RemoteFile } from "./types";
 
 const ansiPalette: Record<number, string> = {
@@ -124,12 +126,9 @@ export function LogDock({
           <span>{preview.path}</span>
           <small>{streamId === null ? "준비 중" : "tail -F 추적 중"}</small>
         </div>
-        <button
-          className="border-0 bg-transparent text-[#91a6b6]"
-          onClick={onClose}
-        >
+        <IconButton onClick={onClose}>
           <X size={18} />
-        </button>
+        </IconButton>
       </header>
       <pre
         className="m-0 min-h-0 flex-1 overflow-auto p-[12px_16px] font-mono text-xs leading-[1.55] whitespace-pre-wrap text-[#d0e0ec]"

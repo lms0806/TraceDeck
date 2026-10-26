@@ -1,45 +1,23 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import {
-  ChartNoAxesCombined,
-  CircleDot,
-  FolderOpen,
-  KeyRound,
-  MonitorCog,
-  Plus,
-  Search,
-  Server,
-  ShieldCheck,
-  X,
-} from "lucide-react";
+import { CircleDot, FolderOpen, KeyRound, Plus, X } from "lucide-react";
 import "./styles.css";
 import { Browser } from "./components/Browser";
+import { Sidebar } from "./components/app/Sidebar";
+import { TabBar } from "./components/app/TabBar";
 import { Panel } from "./components/ui/Panel";
 import { PrimaryButton } from "./components/ui/PrimaryButton";
 import { parseTracing, type TracingRecord } from "./logging/tracing";
 
-type AuthKind = "password" | "privateKey" | "agent";
-type Profile = {
-  id: string;
-  name: string;
-  host: string;
-  port: number;
-  username: string;
-  group: string;
-  authKind?: AuthKind;
-  privateKeyPath?: string;
-};
-type Tab = { id: string; title: string; profileId?: string };
-type ConnectionCheck = { connected: boolean; message: string };
-type RemoteEntry = {
-  name: string;
-  path: string;
-  isDir: boolean;
-  details: string;
-};
-type LogSource = { path: string; content: string };
+import type {
+  ConnectionCheck,
+  LogSource,
+  Profile,
+  RemoteEntry,
+  Tab,
+} from "./app/types";
 const isLogFileName = (name: string) => /\.log(?:[._-].*)?$/i.test(name);
 const emptyProfile = (): Profile => ({
   id: crypto.randomUUID(),
@@ -55,10 +33,7 @@ function App() {
   const [profiles, setProfiles] = useState(initialProfiles);
   const [tabs, setTabs] = useState<Tab[]>([{ id: "home", title: "Home" }]);
   const [activeId, setActiveId] = useState("home");
-  const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
-  const tabDrag = useRef<{ id: string; startX: number } | null>(null);
   const [selectedId, setSelectedId] = useState("");
-  const [query, setQuery] = useState("");
   const [notice, setNotice] = useState(
     "서버를 선택하고 ‘폴더 열기’를 눌러 원격 파일을 확인하세요.",
   );
@@ -70,11 +45,6 @@ function App() {
       .catch(() => undefined);
   }, []);
   const active = tabs.find((tab) => tab.id === activeId) ?? tabs[0];
-  const shown = profiles.filter((profile) =>
-    `${profile.name} ${profile.host} ${profile.group}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
-  );
   function openProfile(profile: Profile) {
     setSelectedId(profile.id);
     const found = tabs.find((tab) => tab.profileId === profile.id);
@@ -111,26 +81,6 @@ function App() {
         ...withoutDragged.slice(insertAt),
       ];
     });
-  }
-  function startTabDrag(id: string, startX: number) {
-    if (id !== "home") tabDrag.current = { id, startX };
-  }
-  function updateTabDrag(clientX: number, clientY: number) {
-    const drag = tabDrag.current;
-    if (!drag || Math.abs(clientX - drag.startX) < 6) return;
-    setDraggedTabId(drag.id);
-    const target = document
-      .elementFromPoint(clientX, clientY)
-      ?.closest<HTMLButtonElement>("[data-tab-id]");
-    const targetId = target?.dataset.tabId;
-    if (targetId) {
-      const bounds = target.getBoundingClientRect();
-      moveTab(drag.id, targetId, clientX > bounds.left + bounds.width / 2);
-    }
-  }
-  function endTabDrag() {
-    tabDrag.current = null;
-    setDraggedTabId(null);
   }
   function openAnalysis() {
     const found = tabs.find((tab) => tab.id === "analysis");
@@ -193,128 +143,28 @@ function App() {
           <Plus size={16} /> 새 세션
         </PrimaryButton>
       </header>
-      <aside className="sidebar">
-        <label className="search-box">
-          <Search size={15} />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="서버 검색"
-          />
-        </label>
-        <div className="side-heading">
-          <span>SAVED SESSIONS</span>
-          <button onClick={() => setDialog(true)}>
-            <Plus size={15} />
-          </button>
-        </div>
-        <div className="session-tree">
-          {shown.map((profile) => (
-            <div className="saved-session" key={profile.id}>
-              <button
-                className={
-                  selectedId === profile.id
-                    ? "server-row selected"
-                    : "server-row"
-                }
-                onClick={() => openProfile(profile)}
-              >
-                <span className="server-state" />
-                <Server size={15} />
-                <span>
-                  <strong>{profile.name}</strong>
-                  <small>
-                    {profile.username}@{profile.host}
-                  </small>
-                </span>
-                <span className="ssh-tag">SFTP</span>
-              </button>
-              <button
-                className="delete-saved-session"
-                onClick={() => removeProfile(profile)}
-                aria-label={`${profile.name} 저장 세션 삭제`}
-              >
-                <X size={14} />
-              </button>
-            </div>
-          ))}
-        </div>
-        <div className="side-heading open-heading">
-          <span>OPEN SESSIONS</span>
-        </div>
-        <div className="open-sessions">
-          {tabs
-            .filter((tab) => tab.profileId)
-            .map((tab) => (
-              <div key={tab.id}>
-                <button onClick={() => setActiveId(tab.id)}>
-                  <FolderOpen size={14} />
-                  {tab.title}
-                </button>
-                <button
-                  className="close-session"
-                  onClick={() => closeSession(tab.id)}
-                  aria-label={`${tab.title} 세션 닫기`}
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            ))}
-        </div>
-        <div className="sidebar-footer">
-          <button onClick={() => setActiveId("home")}>
-            <MonitorCog size={16} /> 홈
-          </button>
-          <button onClick={openAnalysis}>
-            <ChartNoAxesCombined size={16} /> 분석
-          </button>
-          <button>
-            <ShieldCheck size={16} /> 보안 상태
-          </button>
-        </div>
-      </aside>
+      <Sidebar
+        profiles={profiles}
+        selectedId={selectedId}
+        tabs={tabs}
+        onOpenProfile={openProfile}
+        onRemoveProfile={removeProfile}
+        onCloseSession={closeSession}
+        onNewSession={() => {
+          setDraft(emptyProfile());
+          setDialog(true);
+        }}
+        onHome={() => setActiveId("home")}
+        onAnalysis={openAnalysis}
+      />
       <section className="workspace">
-        <nav className="tabs">
-          {tabs.map((tab) => (
-            <button
-              className={
-                tab.id === activeId
-                  ? `tab active${draggedTabId === tab.id ? " dragging" : ""}`
-                  : `tab${draggedTabId === tab.id ? " dragging" : ""}`
-              }
-              key={tab.id}
-              onClick={() => setActiveId(tab.id)}
-              data-tab-id={tab.id}
-              onPointerDown={(event) => {
-                event.currentTarget.setPointerCapture(event.pointerId);
-                startTabDrag(tab.id, event.clientX);
-              }}
-              onPointerMove={(event) =>
-                updateTabDrag(event.clientX, event.clientY)
-              }
-              onPointerUp={endTabDrag}
-              onPointerCancel={endTabDrag}
-            >
-              {tab.profileId ? (
-                <FolderOpen size={15} />
-              ) : tab.id === "analysis" ? (
-                <ChartNoAxesCombined size={15} />
-              ) : (
-                <MonitorCog size={15} />
-              )}
-              {tab.title}
-              {tab.id !== "home" && (
-                <X
-                  size={14}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    closeSession(tab.id);
-                  }}
-                />
-              )}
-            </button>
-          ))}
-        </nav>
+        <TabBar
+          tabs={tabs}
+          activeId={activeId}
+          onActivate={setActiveId}
+          onClose={closeSession}
+          onMove={moveTab}
+        />
         {activeId === "home" && <Home open={openProfile} profiles={profiles} />}
         {tabs
           .filter((tab) => tab.profileId)

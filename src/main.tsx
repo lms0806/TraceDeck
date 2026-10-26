@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import "./styles.css";
 import { Browser } from "./components/Browser";
+import { parseTracing, type TracingRecord } from "./logging/tracing";
 
 type AuthKind = "password" | "privateKey" | "agent";
 type Profile = {
@@ -37,12 +38,6 @@ type RemoteEntry = {
   details: string;
 };
 type LogSource = { path: string; content: string };
-type TracingRecord = {
-  timestamp: string;
-  level: string;
-  target: string;
-  message: string;
-};
 const isLogFileName = (name: string) => /\.log(?:[._-].*)?$/i.test(name);
 const emptyProfile = (): Profile => ({
   id: crypto.randomUUID(),
@@ -343,26 +338,6 @@ function Home({
       </div>
     </section>
   );
-}
-
-function parseTracing(content: string): TracingRecord[] {
-  // eslint-disable-next-line no-control-regex -- ANSI SGR sequences from tracing output.
-  const ansi = /\u001b\[[0-9;]*m/g;
-  return content.split("\n").flatMap((raw) => {
-    const line = raw.replace(ansi, "");
-    const match = line.match(
-      /^(\d{4}-\d{2}-\d{2}T\S+)\s+(TRACE|DEBUG|INFO|WARN|ERROR)\s+(.+?):\s+(.*)$/,
-    );
-    if (!match) return [];
-    return [
-      {
-        timestamp: match[1],
-        level: match[2],
-        target: match[3],
-        message: match[4],
-      },
-    ];
-  });
 }
 
 function Analysis({

@@ -1,0 +1,97 @@
+use std::{path::Path, process::Command};
+
+use crate::models::ConnectionProfile;
+
+pub(crate) fn validate_remote_path(path: &str) -> Result<(), String> {
+    if path.contains(['\r', '\n', '\0']) {
+        return Err("유효하지 않은 원격 경로입니다.".into());
+    }
+    Ok(())
+}
+
+pub(crate) fn escape_remote_shell_path(path: &str) -> String {
+    path.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('$', "\\$")
+        .replace('`', "\\`")
+}
+
+pub(crate) fn reject_password_auth(
+    profile: &ConnectionProfile,
+    action: &str,
+) -> Result<(), String> {
+    if profile.auth_kind == "password" {
+        return Err(format!(
+            "비밀번호 방식의 {action}은 아직 지원되지 않습니다."
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn destination(profile: &ConnectionProfile) -> String {
+    format!("{}@{}", profile.username, profile.host)
+}
+
+pub(crate) fn append_ssh_auth_args(
+    command: &mut Command,
+    profile: &ConnectionProfile,
+    known_hosts_file: &Path,
+) -> Result<(), String> {
+    command
+        .arg("-o")
+        .arg("BatchMode=yes")
+        .arg("-o")
+        .arg("ConnectTimeout=10")
+        .arg("-o")
+        .arg("StrictHostKeyChecking=accept-new")
+        .arg("-o")
+        .arg(format!("UserKnownHostsFile={}", known_hosts_file.display()))
+        .arg("-p")
+        .arg(profile.port.to_string());
+    if profile.auth_kind == "privateKey" {
+        let Some(key_path) = profile.private_key_path.as_deref() else {
+            return Err("개인키 파일이 지정되지 않았습니다.".into());
+        };
+        command.arg("-i").arg(key_path);
+    }
+    Ok(())
+}
+
+pub(crate) fn ssh_command(
+    profile: &ConnectionProfile,
+    known_hosts_file: &Path,
+) -> Result<Command, String> {
+    let mut command = Command::new("ssh");
+    append_ssh_auth_args(&mut command, profile, known_hosts_file)?;
+    command.arg(destination(profile));
+    Ok(command)
+}
+
+pub(crate) fn sftp_command(
+    profile: &ConnectionProfile,
+    known_hosts_file: &Path,
+) -> Result<Command, String> {
+    let mut command = Command::new("sftp");
+    command
+        .arg("-q")
+        .arg("-b")
+        .arg("-")
+        .arg("-o")
+        .arg("BatchMode=yes")
+        .arg("-o")
+        .arg("ConnectTimeout=10")
+        .arg("-o")
+        .arg("StrictHostKeyChecking=accept-new")
+        .arg("-o")
+        .arg(format!("UserKnownHostsFile={}", known_hosts_file.display()))
+        .arg("-P")
+        .arg(profile.port.to_string());
+    if profile.auth_kind == "privateKey" {
+        let Some(key_path) = profile.private_key_path.as_deref() else {
+            return Err("개인키 파일이 지정되지 않았습니다.".into());
+        };
+        command.arg("-i").arg(key_path);
+    }
+    command.arg(destination(profile));
+    Ok(command)
+}

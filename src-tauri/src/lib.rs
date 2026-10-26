@@ -1,6 +1,9 @@
+mod logs;
 mod models;
 mod profiles;
 mod remote;
+mod sftp;
+mod ssh_client;
 mod state;
 
 use std::fs;

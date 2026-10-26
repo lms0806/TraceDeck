@@ -62,25 +62,6 @@ button {
   font-size: 10px;
   letter-spacing: 1px;
 }
-.top-tools {
-  margin-left: auto;
-  display: flex;
-  gap: 4px;
-}
-.top-tools button {
-  border: 0;
-  background: transparent;
-  border-radius: 5px;
-  padding: 7px 9px;
-  color: #9fb2c4;
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-}
-.top-tools button:hover {
-  background: #283949;
-  color: #fff;
-}
 .sidebar {
   grid-row: 2;
   padding: 14px 10px;
@@ -545,29 +526,6 @@ button {
   color: #a8bbc9;
   font-size: 13px;
 }
-.connection-summary {
-  display: grid;
-  align-content: center;
-  justify-items: end;
-}
-.connection-summary span {
-  display: flex;
-  gap: 6px;
-  color: #9db2c4;
-  font-size: 12px;
-}
-.connection-summary strong {
-  font-size: 38px;
-}
-.connection-summary small {
-  color: #7791a5;
-}
-.home-grid {
-  display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
-  gap: 18px;
-  margin-top: 18px;
-}
 .quick-server {
   width: 100%;
   border: 0;
@@ -624,12 +582,6 @@ button {
   color: #dbe8f0;
   font-size: 12px;
 }
-.server-workspace {
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: auto;
-}
 .offline-dot {
   display: inline-block;
   width: 7px;
@@ -637,77 +589,6 @@ button {
   background: #e5b662;
   border-radius: 50%;
   margin-right: 6px;
-}
-.server-main {
-  display: grid;
-  grid-template-columns: 1fr 285px;
-  min-height: 270px;
-  border-bottom: 1px solid #293846;
-}
-.terminal-pane,
-.remote-pane {
-  min-height: 0;
-  background: #0e151c;
-}
-.terminal-pane header,
-.remote-pane header,
-.log-pane > header {
-  height: 37px;
-  padding: 0 13px;
-  border-bottom: 1px solid #293846;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: #b2c5d3;
-  font-size: 12px;
-}
-.terminal-pane header span {
-  color: #637c91;
-  font-size: 10px;
-}
-.terminal-copy {
-  padding: 20px;
-  font-family: "Cascadia Code", Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.7;
-  color: #cae7d9;
-}
-.terminal-copy p {
-  margin: 0;
-}
-.terminal-copy .muted {
-  color: #7490a3;
-}
-.terminal-connect {
-  margin-top: 13px;
-  border: 1px solid #3e655f;
-  border-radius: 5px;
-  padding: 7px 10px;
-  background: #173a32;
-  color: #6fe0b1;
-  font-size: 11px;
-}
-.remote-pane {
-  border-left: 1px solid #293846;
-  background: #151e28;
-}
-.remote-empty {
-  height: calc(100% - 37px);
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 8px;
-  padding: 20px;
-  color: #718a9d;
-  text-align: center;
-  font-size: 11px;
-}
-.remote-empty svg {
-  color: #536c80;
-}
-.remote-empty strong {
-  color: #abc0cf;
-  font-size: 12px;
 }
 .log-pane {
   min-height: 0;

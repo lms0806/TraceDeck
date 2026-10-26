@@ -214,21 +214,27 @@ function Home({
   open: (profile: Profile) => void;
 }) {
   return (
-    <section className="home-view">
-      <div className="welcome">
+    <section className="overflow-auto p-[34px]">
+      <div className="flex justify-between gap-[30px] rounded-[10px] border border-[#355365] bg-[linear-gradient(120deg,#1e3f46,#192c39_65%)] p-7">
         <div>
-          <p>REMOTE FILE WORKSPACE</p>
-          <h1>원격 서버 파일을 GUI로 관리하세요.</h1>
-          <span>서버를 선택한 뒤 SFTP 폴더 브라우저를 엽니다.</span>
+          <p className="mb-[6px] text-[10px] font-extrabold tracking-[1.2px] text-[#59d6a5]">
+            REMOTE FILE WORKSPACE
+          </p>
+          <h1 className="mb-2.5 max-w-[570px] text-[25px] leading-[1.35] text-[#f4fbff]">
+            원격 서버 파일을 GUI로 관리하세요.
+          </h1>
+          <span className="text-[13px] text-[#a8bbc9]">
+            서버를 선택한 뒤 SFTP 폴더 브라우저를 엽니다.
+          </span>
         </div>
       </div>
-      <Panel as="div" className="quick-list">
+      <Panel as="div" className="mt-[18px] quick-list">
         <header>
           <h2>빠른 연결</h2>
         </header>
         {profiles.map((profile) => (
           <button
-            className="quick-server"
+            className="flex w-full items-center gap-2.5 border-0 border-b border-[#293947] bg-transparent px-0.5 py-[11px] text-left last:border-0 [&>svg]:text-[#75a4c5] [&>span]:grid [&>span]:gap-[3px] [&_strong]:text-xs [&_small]:text-[11px] [&_small]:text-[#8196a8]"
             key={profile.id}
             onClick={() => open(profile)}
           >
@@ -529,7 +535,9 @@ function SessionDialog({
       <form className="session-dialog" onSubmit={submit}>
         <header>
           <div>
-            <p>NEW SFTP SESSION</p>
+            <p className="mb-[6px] text-[10px] font-extrabold tracking-[1.2px] text-[#59d6a5]">
+              NEW SFTP SESSION
+            </p>
             <h2>원격 서버 추가</h2>
           </div>
           <button type="button" onClick={close}>

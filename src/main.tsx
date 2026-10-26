@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import "./styles.css";
 import { Browser } from "./components/Browser";
+import { Panel } from "./components/ui/Panel";
+import { PrimaryButton } from "./components/ui/PrimaryButton";
 import { parseTracing, type TracingRecord } from "./logging/tracing";
 
 type AuthKind = "password" | "privateKey" | "agent";
@@ -182,15 +184,14 @@ function App() {
           <span>Tracing Log</span>
           <small>SFTP FILE BROWSER</small>
         </div>
-        <button
-          className="primary"
+        <PrimaryButton
           onClick={() => {
             setDraft(emptyProfile());
             setDialog(true);
           }}
         >
           <Plus size={16} /> 새 세션
-        </button>
+        </PrimaryButton>
       </header>
       <aside className="sidebar">
         <label className="search-box">
@@ -371,7 +372,7 @@ function Home({
           <span>서버를 선택한 뒤 SFTP 폴더 브라우저를 엽니다.</span>
         </div>
       </div>
-      <div className="card quick-list">
+      <Panel as="div" className="quick-list">
         <header>
           <h2>빠른 연결</h2>
         </header>
@@ -390,7 +391,7 @@ function Home({
             </span>
           </button>
         ))}
-      </div>
+      </Panel>
     </section>
   );
 }
@@ -515,16 +516,15 @@ function Analysis({
             placeholder="예: /var/log/service"
           />
         </label>
-        <button
-          className="primary"
+        <PrimaryButton
           disabled={!profile || scanning}
           onClick={() => void loadFiles()}
         >
           파일 찾기
-        </button>
+        </PrimaryButton>
       </section>
       <div className="analysis-layout">
-        <section className="analysis-files card">
+        <Panel className="analysis-files">
           <header>
             <h2>분석 대상 로그</h2>
             <span>{selected.length}개 선택</span>
@@ -555,17 +555,17 @@ function Analysis({
               </label>
             ))
           )}
-          <button
-            className="primary analyze-button"
+          <PrimaryButton
+            className="analyze-button"
             disabled={!profile || selected.length === 0 || scanning}
             onClick={() => void analyze()}
           >
             {scanning ? "분석 중…" : "선택 파일 분석"}
-          </button>
+          </PrimaryButton>
           <small className="analysis-limit">
             각 파일의 최신 5,000줄만 읽습니다.
           </small>
-        </section>
+        </Panel>
         <section className="analysis-results">
           <div className="metric-row">
             <article className="metric">
@@ -600,7 +600,7 @@ function Analysis({
               <button onClick={() => setSelectedLevels([])}>필터 해제</button>
             </div>
           )}
-          <section className="card source-table">
+          <Panel className="source-table">
             <header>
               <h2>코드 위치별 로그</h2>
               <span>target / module path</span>
@@ -617,9 +617,9 @@ function Analysis({
                 ))}
               </div>
             )}
-          </section>
+          </Panel>
           {visibleRecords.length > 0 && (
-            <section className="card sample-table">
+            <Panel className="sample-table">
               <header>
                 <h2>최근 로그 예시</h2>
               </header>
@@ -639,7 +639,7 @@ function Analysis({
                     <span>{record.message}</span>
                   </div>
                 ))}
-            </section>
+            </Panel>
           )}
         </section>
       </div>
@@ -728,7 +728,7 @@ function SessionDialog({
           <button type="button" onClick={close}>
             취소
           </button>
-          <button className="primary">저장하고 열기</button>
+          <PrimaryButton type="submit">저장하고 열기</PrimaryButton>
         </footer>
       </form>
     </div>

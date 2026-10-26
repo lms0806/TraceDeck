@@ -5,6 +5,7 @@ import { LogDock } from "./browser/LogDock";
 import type { Profile } from "./browser/types";
 import { useRemoteDirectory } from "./browser/useRemoteDirectory";
 import { useTailStream } from "./browser/useTailStream";
+import { PrimaryButton } from "./ui/PrimaryButton";
 
 export function Browser({
   profile,
@@ -54,13 +55,12 @@ export function Browser({
             }
           />
         </label>
-        <button
-          className="primary"
+        <PrimaryButton
           onClick={() => directory.load(directory.path, true)}
           disabled={directory.loading}
         >
           {directory.loading ? "불러오는 중…" : "폴더 열기"}
-        </button>
+        </PrimaryButton>
       </div>
       <FileList
         entries={directory.entries}

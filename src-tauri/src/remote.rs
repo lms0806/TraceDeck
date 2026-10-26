@@ -14,6 +14,62 @@ use crate::{
     state::{AppState, TailStreams},
 };
 
+fn validate_remote_path(path: &str) -> Result<(), String> {
+    if path.contains(['\r', '\n', '\0']) {
+        return Err("유효하지 않은 원격 경로입니다.".into());
+    }
+    Ok(())
+}
+
+fn escape_remote_shell_path(path: &str) -> String {
+    path.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('$', "\\$")
+        .replace('`', "\\`")
+}
+
+fn parse_sftp_listing(output: &str, requested_path: &str) -> Vec<RemoteEntry> {
+    let base = if requested_path == "/" {
+        "/".to_string()
+    } else {
+        requested_path.trim_end_matches('/').to_string()
+    };
+    output
+        .lines()
+        .filter_map(|line| {
+            let columns: Vec<&str> = line.split_whitespace().collect();
+            if columns.len() < 9
+                || !(columns[0].starts_with('d')
+                    || columns[0].starts_with('-')
+                    || columns[0].starts_with('l'))
+            {
+                return None;
+            }
+            let name = columns[8..].join(" ");
+            if name == "." || name == ".." {
+                return None;
+            }
+            Some(RemoteEntry {
+                path: if base == "/" {
+                    format!("/{name}")
+                } else {
+                    format!("{base}/{name}")
+                },
+                is_dir: columns[0].starts_with('d'),
+                details: line.to_string(),
+                name,
+            })
+        })
+        .collect()
+}
+
+fn validate_log_paths(paths: &[String]) -> Result<(), String> {
+    if paths.len() > 10 {
+        return Err("한 번에 분석할 수 있는 로그 파일은 최대 10개입니다.".into());
+    }
+    paths.iter().try_for_each(|path| validate_remote_path(path))
+}
+
 #[tauri::command]
 pub(crate) fn check_ssh_connection(
     profile: ConnectionProfile,
@@ -86,9 +142,7 @@ pub(crate) fn list_remote_directory(
     if profile.auth_kind == "password" {
         return Err("비밀번호 방식의 SFTP 입력은 아직 지원되지 않습니다. 개인키 또는 ssh-agent를 선택하세요.".into());
     }
-    if path.contains(['\r', '\n']) {
-        return Err("유효하지 않은 원격 경로입니다.".into());
-    }
+    validate_remote_path(&path)?;
 
     let destination = format!("{}@{}", profile.username, profile.host);
     let mut command = Command::new("sftp");
@@ -123,7 +177,7 @@ pub(crate) fn list_remote_directory(
     let mut child = command
         .spawn()
         .map_err(|error| format!("Windows SFTP를 실행하지 못했습니다: {error}"))?;
-    let escaped_path = path.replace('\\', "\\\\").replace('"', "\\\"");
+    let escaped_path = escape_remote_shell_path(&path);
     let batch = format!("ls -l \"{escaped_path}\"\nquit\n");
     child
         .stdin
@@ -142,39 +196,10 @@ pub(crate) fn list_remote_directory(
             error
         });
     }
-    let base = if path == "/" {
-        "/".to_string()
-    } else {
-        path.trim_end_matches('/').to_string()
-    };
-    let entries = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter_map(|line| {
-            let columns: Vec<&str> = line.split_whitespace().collect();
-            if columns.len() < 9
-                || !(columns[0].starts_with('d')
-                    || columns[0].starts_with('-')
-                    || columns[0].starts_with('l'))
-            {
-                return None;
-            }
-            let name = columns[8..].join(" ");
-            if name == "." || name == ".." {
-                return None;
-            }
-            Some(RemoteEntry {
-                path: if base == "/" {
-                    format!("/{name}")
-                } else {
-                    format!("{base}/{name}")
-                },
-                is_dir: columns[0].starts_with('d'),
-                details: line.to_string(),
-                name,
-            })
-        })
-        .collect();
-    Ok(entries)
+    Ok(parse_sftp_listing(
+        &String::from_utf8_lossy(&output.stdout),
+        &path,
+    ))
 }
 
 #[tauri::command]
@@ -186,14 +211,8 @@ pub(crate) fn find_remote_log_files(
     if profile.auth_kind == "password" {
         return Err("비밀번호 방식의 로그 탐색은 아직 지원되지 않습니다.".into());
     }
-    if path.contains(['\r', '\n', '\0']) {
-        return Err("유효하지 않은 원격 경로입니다.".into());
-    }
-    let escaped_path = path
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('$', "\\$")
-        .replace('`', "\\`");
+    validate_remote_path(&path)?;
+    let escaped_path = escape_remote_shell_path(&path);
     // Production logs are commonly rotated as .log.1, .log-YYYYMMDD, etc.
     // Limit both tree depth and result count to keep the UI responsive.
     let remote_command = format!(
@@ -261,14 +280,8 @@ pub(crate) fn read_remote_file(
     if profile.auth_kind == "password" {
         return Err("비밀번호 방식의 파일 열기는 아직 지원되지 않습니다.".into());
     }
-    if path.contains(['\r', '\n', '\0']) {
-        return Err("유효하지 않은 원격 경로입니다.".into());
-    }
-    let escaped_path = path
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('$', "\\$")
-        .replace('`', "\\`");
+    validate_remote_path(&path)?;
+    let escaped_path = escape_remote_shell_path(&path);
     let remote_command = format!("tail -n 100 -- \"{escaped_path}\"");
     let mut command = Command::new("ssh");
     append_ssh_auth_args(&mut command, &profile, &state.known_hosts_file)?;
@@ -306,20 +319,11 @@ pub(crate) fn read_remote_log_files(
     if paths.is_empty() {
         return Ok(Vec::new());
     }
-    if paths.len() > 10 {
-        return Err("한 번에 분석할 수 있는 로그 파일은 최대 10개입니다.".into());
-    }
+    validate_log_paths(&paths)?;
 
     let mut files = Vec::with_capacity(paths.len());
     for path in paths {
-        if path.contains(['\r', '\n', '\0']) {
-            return Err("유효하지 않은 원격 경로입니다.".into());
-        }
-        let escaped_path = path
-            .replace('\\', "\\\\")
-            .replace('"', "\\\"")
-            .replace('$', "\\$")
-            .replace('`', "\\`");
+        let escaped_path = escape_remote_shell_path(&path);
         // Keep analysis bounded: enough recent context for patterns without
         // transferring an entire production log into the webview.
         let remote_command = format!("tail -n 5000 -- \"{escaped_path}\"");
@@ -358,14 +362,8 @@ pub(crate) fn start_tail_stream(
     if profile.auth_kind == "password" {
         return Err("비밀번호 방식의 실시간 로그 추적은 아직 지원되지 않습니다.".into());
     }
-    if path.contains(['\r', '\n', '\0']) {
-        return Err("유효하지 않은 원격 경로입니다.".into());
-    }
-    let escaped_path = path
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('$', "\\$")
-        .replace('`', "\\`");
+    validate_remote_path(&path)?;
+    let escaped_path = escape_remote_shell_path(&path);
     // The UI loads the initial 100 lines separately, then this persistent stream
     // sends only lines appended after the stream begins.
     let remote_command = format!("tail -n 0 -F -- \"{escaped_path}\"");
@@ -420,4 +418,52 @@ pub(crate) fn stop_tail_stream(
         let _ = child.kill();
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        escape_remote_shell_path, parse_sftp_listing, validate_log_paths, validate_remote_path,
+    };
+
+    #[test]
+    fn parses_sftp_listing_and_skips_dot_entries() {
+        let listing = "drwxr-xr-x 2 opc staff 4096 Oct 25 14:00 .\n\
+                       drwxr-xr-x 2 opc staff 4096 Oct 25 14:00 ..\n\
+                       -rw-r--r-- 1 opc staff  128 Oct 25 14:01 app.log\n\
+                       drwxr-xr-x 2 opc staff 4096 Oct 25 14:02 archive";
+
+        let entries = parse_sftp_listing(listing, "/var/log/");
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].name, "app.log");
+        assert_eq!(entries[0].path, "/var/log/app.log");
+        assert!(!entries[0].is_dir);
+        assert_eq!(entries[1].path, "/var/log/archive");
+        assert!(entries[1].is_dir);
+    }
+
+    #[test]
+    fn rejects_unsafe_remote_paths_and_escapes_shell_metacharacters() {
+        assert!(validate_remote_path("/var/log/app.log").is_ok());
+        assert!(validate_remote_path("/var/log/evil\ncommand").is_err());
+        assert!(validate_remote_path("/var/log/evil\0name").is_err());
+        assert_eq!(
+            escape_remote_shell_path("/var/log/$app`date`.log"),
+            "/var/log/\\$app\\`date\\`.log"
+        );
+    }
+
+    #[test]
+    fn limits_log_analysis_to_ten_safe_paths() {
+        let allowed = (0..10)
+            .map(|index| format!("/var/log/{index}.log"))
+            .collect::<Vec<_>>();
+        let too_many = (0..11)
+            .map(|index| format!("/var/log/{index}.log"))
+            .collect::<Vec<_>>();
+
+        assert!(validate_log_paths(&allowed).is_ok());
+        assert!(validate_log_paths(&too_many).is_err());
+    }
 }

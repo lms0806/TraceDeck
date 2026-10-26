@@ -6,6 +6,7 @@ import type { Profile } from "./browser/types";
 import { useRemoteDirectory } from "./browser/useRemoteDirectory";
 import { useTailStream } from "./browser/useTailStream";
 import { PrimaryButton } from "./ui/PrimaryButton";
+import { SecondaryButton } from "./ui/SecondaryButton";
 
 export function Browser({
   profile,
@@ -36,20 +37,18 @@ export function Browser({
         </button>
       </header>
       <div className="flex items-center gap-2 border-b border-[#293846] bg-[#18232e] px-[14px] py-2.5">
-        <button
-          className="rounded border border-[#3d5264] bg-[#202e3a] px-[9px] py-1.5 text-[11px] text-[#c5d4df] disabled:cursor-default disabled:opacity-50"
+        <SecondaryButton
           onClick={directory.back}
           disabled={directory.loading || !directory.canGoBack}
         >
           <ChevronLeft size={16} /> 뒤로
-        </button>
-        <button
-          className="rounded border border-[#3d5264] bg-[#202e3a] px-[9px] py-1.5 text-[11px] text-[#c5d4df] disabled:cursor-default disabled:opacity-50"
+        </SecondaryButton>
+        <SecondaryButton
           onClick={() => directory.load(directory.path, false)}
           disabled={directory.loading}
         >
           새로고침
-        </button>
+        </SecondaryButton>
         <label className="flex flex-1 items-center gap-2 text-[11px] text-[#8ba1b4]">
           <span>원격 경로</span>
           <input

@@ -114,18 +114,25 @@ export function LogDock({
   }, []);
 
   return (
-    <section className="file-preview-dock" ref={dockRef}>
-      <header>
-        <div>
+    <section
+      className="file-preview-dock flex h-[310px] min-h-[150px] max-h-[75vh] flex-none flex-col overflow-hidden border-t-[3px] border-[#3a5264] bg-[#0d141b]"
+      ref={dockRef}
+    >
+      <header className="flex h-[38px] items-center justify-between border-b border-[#293d4d] px-3 text-xs text-[#ccdce7]">
+        <div className="flex min-w-0 items-center gap-[7px] [&>span]:overflow-hidden [&>span]:text-ellipsis [&>span]:whitespace-nowrap [&>small]:whitespace-nowrap [&>small]:rounded-sm [&>small]:bg-[#153d32] [&>small]:px-[5px] [&>small]:py-0.5 [&>small]:text-[10px] [&>small]:text-[#74d6ac]">
           <File size={16} />
           <span>{preview.path}</span>
           <small>{streamId === null ? "준비 중" : "tail -F 추적 중"}</small>
         </div>
-        <button onClick={onClose}>
+        <button
+          className="border-0 bg-transparent text-[#91a6b6]"
+          onClick={onClose}
+        >
           <X size={18} />
         </button>
       </header>
       <pre
+        className="m-0 min-h-0 flex-1 overflow-auto p-[12px_16px] font-mono text-xs leading-[1.55] whitespace-pre-wrap text-[#d0e0ec]"
         ref={previewScroll}
         onScroll={(event) => {
           const element = event.currentTarget;

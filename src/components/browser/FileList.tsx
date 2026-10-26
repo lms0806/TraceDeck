@@ -16,42 +16,50 @@ export function FileList({
   onOpenFile: (entry: RemoteEntry) => void;
 }) {
   return (
-    <div className="file-content">
-      <aside className="folder-sidebar">
-        <header>
+    <div className="grid min-h-0 flex-1 grid-cols-[220px_1fr]">
+      <aside className="border-r border-[#293846] bg-[#151e28] p-[13px]">
+        <header className="mb-2.5 flex items-center gap-[7px] text-xs text-[#a9bdcc]">
           <FolderTree size={16} /> 위치
         </header>
-        <button onClick={() => onOpenDirectory(".")}>
+        <button
+          className="flex w-full gap-[7px] rounded bg-transparent p-2 text-left text-xs text-[#b8c8d4] hover:bg-[#243341]"
+          onClick={() => onOpenDirectory(".")}
+        >
           <Folder size={15} /> 홈
         </button>
-        <button onClick={() => onOpenDirectory("/")}>
+        <button
+          className="flex w-full gap-[7px] rounded bg-transparent p-2 text-left text-xs text-[#b8c8d4] hover:bg-[#243341]"
+          onClick={() => onOpenDirectory("/")}
+        >
           <HardDrive size={15} /> /
         </button>
-        <p>목록은 변경된 경우에만 갱신됩니다.</p>
+        <p className="mx-[6px] my-[18px] text-[10px] leading-normal text-[#72899b]">
+          목록은 변경된 경우에만 갱신됩니다.
+        </p>
       </aside>
-      <section className="file-list">
-        <header>
-          <div>
+      <section className="min-w-0 overflow-auto bg-[#111920]">
+        <header className="border-b border-[#293846] px-[15px] py-2.5 text-[10px] tracking-[.7px] text-[#71879a]">
+          <div className="grid grid-cols-[minmax(240px,1fr)_minmax(280px,1.4fr)] gap-[15px]">
             <span>이름</span>
             <span>권한 · 소유자 · 크기</span>
           </div>
         </header>
         {!loaded && (
-          <div className="file-empty">
+          <div className="grid min-h-[250px] place-content-center justify-items-center gap-[9px] p-[25px] text-center text-xs text-[#7e96a8] [&>strong]:text-[13px] [&>strong]:text-[#b9cad6] [&>svg]:text-[#5f8099]">
             <FolderOpen size={34} />
             <strong>원격 폴더를 열 준비가 됐습니다.</strong>
             <span>“폴더 열기”를 누르면 서버의 파일 목록을 가져옵니다.</span>
           </div>
         )}
         {loaded && !loading && entries.length === 0 && (
-          <div className="file-empty">
+          <div className="grid min-h-[250px] place-content-center justify-items-center gap-[9px] p-[25px] text-center text-xs text-[#7e96a8] [&>strong]:text-[13px] [&>strong]:text-[#b9cad6] [&>svg]:text-[#5f8099]">
             <FolderOpen size={34} />
             <strong>폴더가 비어 있거나 읽을 수 없습니다.</strong>
           </div>
         )}
         {entries.map((entry) => (
           <button
-            className="file-row"
+            className="grid w-full grid-cols-[minmax(240px,1fr)_minmax(280px,1.4fr)] gap-[15px] border-0 border-b border-[#1e2b36] bg-transparent px-[15px] py-[9px] text-left text-[#cbd8e2] hover:bg-[#1b2a35] [&>span]:flex [&>span]:items-center [&>span]:gap-2 [&_b]:text-xs [&_b]:font-[550] [&_small]:overflow-hidden [&_small]:text-ellipsis [&_small]:whitespace-nowrap [&_small]:font-mono [&_small]:text-[10px] [&_small]:text-[#7c94a6]"
             key={entry.path}
             onClick={() =>
               entry.isDir ? onOpenDirectory(entry.path) : onOpenFile(entry)
@@ -60,7 +68,7 @@ export function FileList({
           >
             <span>
               {entry.isDir ? (
-                <Folder className="folder-icon" size={17} />
+                <Folder className="text-[#e7bc66]" size={17} />
               ) : (
                 <File size={17} />
               )}

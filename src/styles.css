@@ -62,16 +62,12 @@ button {
   font-size: 10px;
   letter-spacing: 1px;
 }
-.connect-button:hover {
-  background: #359372;
-}
 .top-tools {
   margin-left: auto;
   display: flex;
   gap: 4px;
 }
-.top-tools button,
-.server-header button {
+.top-tools button {
   border: 0;
   background: transparent;
   border-radius: 5px;
@@ -81,8 +77,7 @@ button {
   gap: 6px;
   align-items: center;
 }
-.top-tools button:hover,
-.server-header button:hover {
+.top-tools button:hover {
   background: #283949;
   color: #fff;
 }
@@ -635,21 +630,6 @@ button {
   flex-direction: column;
   overflow: auto;
 }
-.server-header {
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 18px;
-  border-bottom: 1px solid #293846;
-  color: #9fb2c2;
-  font-size: 12px;
-}
-.server-header b {
-  margin-left: 6px;
-  color: #e8f1f6;
-  font-weight: 500;
-}
 .offline-dot {
   display: inline-block;
   width: 7px;
@@ -657,10 +637,6 @@ button {
   background: #e5b662;
   border-radius: 50%;
   margin-right: 6px;
-}
-.connect-button {
-  background: #236d56 !important;
-  color: #effff8 !important;
 }
 .server-main {
   display: grid;
@@ -918,163 +894,6 @@ button {
   padding: 8px 11px;
 }
 
-/* Remote browser */
-.file-workspace {
-  min-height: 0;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-}
-.file-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-bottom: 1px solid #293846;
-  background: #18232e;
-}
-.file-toolbar button {
-  border: 1px solid #3d5264;
-  border-radius: 5px;
-  background: #202e3a;
-  padding: 6px 9px;
-  color: #c5d4df;
-  font-size: 11px;
-}
-.file-toolbar button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.file-toolbar label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  color: #8ba1b4;
-  font-size: 11px;
-}
-.file-toolbar input {
-  min-width: 0;
-  flex: 1;
-  border: 1px solid #3a5061;
-  border-radius: 5px;
-  background: #101820;
-  padding: 7px 9px;
-  color: #e8f0f5;
-}
-.up-icon {
-  transform: rotate(180deg);
-}
-.file-content {
-  min-height: 0;
-  flex: 1;
-  display: grid;
-  grid-template-columns: 220px 1fr;
-}
-.folder-sidebar {
-  border-right: 1px solid #293846;
-  background: #151e28;
-  padding: 13px;
-}
-.folder-sidebar header {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 10px;
-  color: #a9bdcc;
-  font-size: 12px;
-}
-.folder-sidebar button {
-  width: 100%;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  padding: 8px;
-  display: flex;
-  gap: 7px;
-  color: #b8c8d4;
-  text-align: left;
-  font-size: 12px;
-}
-.folder-sidebar button:hover {
-  background: #243341;
-}
-.folder-sidebar p {
-  margin: 18px 6px;
-  color: #72899b;
-  font-size: 10px;
-  line-height: 1.5;
-}
-.file-list {
-  min-width: 0;
-  overflow: auto;
-  background: #111920;
-}
-.file-list > header {
-  padding: 10px 15px;
-  border-bottom: 1px solid #293846;
-  color: #71879a;
-  font-size: 10px;
-  letter-spacing: 0.7px;
-}
-.file-list > header div,
-.file-row {
-  display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(280px, 1.4fr);
-  gap: 15px;
-}
-.file-row {
-  width: 100%;
-  border: 0;
-  border-bottom: 1px solid #1e2b36;
-  background: transparent;
-  padding: 9px 15px;
-  color: #cbd8e2;
-  text-align: left;
-}
-.file-row:hover {
-  background: #1b2a35;
-}
-.file-row span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.file-row b {
-  font-size: 12px;
-  font-weight: 550;
-}
-.file-row small {
-  overflow: hidden;
-  color: #7c94a6;
-  font-family: "Cascadia Code", Consolas, monospace;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.folder-icon {
-  color: #e7bc66;
-}
-.file-empty {
-  height: 100%;
-  min-height: 250px;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 9px;
-  padding: 25px;
-  color: #7e96a8;
-  text-align: center;
-  font-size: 12px;
-}
-.file-empty svg {
-  color: #5f8099;
-}
-.file-empty strong {
-  color: #b9cad6;
-  font-size: 13px;
-}
-
 /* Sidebar sessions and log colors */
 .open-heading {
   margin-top: 16px;
@@ -1160,71 +979,6 @@ button {
 }
 
 /* Persistent log dock and resize handle */
-.file-preview-dock {
-  height: 310px;
-  min-height: 150px;
-  max-height: 75vh;
-  resize: vertical;
-  overflow: hidden;
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  border-top: 3px solid #3a5264;
-  background: #0d141b;
-}
-.file-preview-dock header {
-  height: 38px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 12px;
-  border-bottom: 1px solid #293d4d;
-  color: #ccdce7;
-  font-size: 12px;
-}
-.file-preview-dock header div {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.file-preview-dock header span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.file-preview-dock header small {
-  border-radius: 3px;
-  padding: 2px 5px;
-  background: #153d32;
-  color: #74d6ac;
-  font-size: 10px;
-  white-space: nowrap;
-}
-.file-preview-dock header button {
-  border: 0;
-  background: transparent;
-  color: #91a6b6;
-}
-.file-preview-dock pre {
-  min-height: 0;
-  flex: 1;
-  overflow: auto;
-  margin: 0;
-  padding: 12px 16px;
-  color: #d0e0ec;
-  font-family: "Cascadia Code", Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-}
-.file-preview-dock .preview-warning {
-  margin: 0;
-  padding: 6px 14px;
-  background: #493716;
-  color: #ecc36f;
-  font-size: 11px;
-}
 .dock-resize-handle {
   position: relative;
   z-index: 2;

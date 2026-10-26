@@ -22,32 +22,38 @@ export function Browser({
   const tail = useTailStream(profile);
 
   return (
-    <section className="file-workspace">
-      <header className="server-header">
+    <section className="flex min-h-0 flex-1 flex-col">
+      <header className="flex h-12 items-center justify-between border-b border-[#293846] px-[18px] text-xs text-[#9fb2c2]">
         <div>
           <span className="offline-dot" /> {profile.username}@{profile.host}:
           {profile.port}
         </div>
-        <button className="connect-button" onClick={onCheck}>
+        <button
+          className="rounded bg-[#236d56] px-[9px] py-[7px] text-[#effff8] hover:bg-[#359372]"
+          onClick={onCheck}
+        >
           연결 확인
         </button>
       </header>
-      <div className="file-toolbar">
+      <div className="flex items-center gap-2 border-b border-[#293846] bg-[#18232e] px-[14px] py-2.5">
         <button
+          className="rounded border border-[#3d5264] bg-[#202e3a] px-[9px] py-1.5 text-[11px] text-[#c5d4df] disabled:cursor-default disabled:opacity-50"
           onClick={directory.back}
           disabled={directory.loading || !directory.canGoBack}
         >
           <ChevronLeft size={16} /> 뒤로
         </button>
         <button
+          className="rounded border border-[#3d5264] bg-[#202e3a] px-[9px] py-1.5 text-[11px] text-[#c5d4df] disabled:cursor-default disabled:opacity-50"
           onClick={() => directory.load(directory.path, false)}
           disabled={directory.loading}
         >
           새로고침
         </button>
-        <label>
+        <label className="flex flex-1 items-center gap-2 text-[11px] text-[#8ba1b4]">
           <span>원격 경로</span>
           <input
+            className="min-w-0 flex-1 rounded border border-[#3a5061] bg-[#101820] px-[9px] py-[7px] text-[#e8f0f5]"
             value={directory.path}
             onChange={(event) => directory.setPath(event.target.value)}
             onKeyDown={(event) =>

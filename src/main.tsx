@@ -96,8 +96,7 @@ function App() {
   }
   function openAnalysis() {
     const found = tabs.find((tab) => tab.id === "analysis");
-    if (!found)
-      setTabs((all) => [...all, { id: "analysis", title: "분석" }]);
+    if (!found) setTabs((all) => [...all, { id: "analysis", title: "분석" }]);
     setActiveId("analysis");
   }
   function removeProfile(profile: Profile) {
@@ -286,7 +285,9 @@ function App() {
             );
           })}
         {tabs.some((tab) => tab.id === "analysis") && (
-          <div className={activeId === "analysis" ? "tab-view" : "tab-view hidden"}>
+          <div
+            className={activeId === "analysis" ? "tab-view" : "tab-view hidden"}
+          >
             <Analysis profiles={profiles} notify={setNotice} />
           </div>
         )}
@@ -345,8 +346,8 @@ function Home({
 }
 
 function parseTracing(content: string): TracingRecord[] {
-    // eslint-disable-next-line no-control-regex -- ANSI SGR sequences from tracing output.
-    const ansi = /\u001b\[[0-9;]*m/g;
+  // eslint-disable-next-line no-control-regex -- ANSI SGR sequences from tracing output.
+  const ansi = /\u001b\[[0-9;]*m/g;
   return content.split("\n").flatMap((raw) => {
     const line = raw.replace(ansi, "");
     const match = line.match(
@@ -379,27 +380,40 @@ function Analysis({
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
   const [scanning, setScanning] = useState(false);
   const profile = profiles.find((item) => item.id === profileId);
-  const logFiles = entries.filter((entry) => !entry.isDir && isLogFileName(entry.name));
-  const levelCounts = records.reduce<Record<string, number>>((counts, record) => {
-    counts[record.level] = (counts[record.level] ?? 0) + 1;
-    return counts;
-  }, {});
+  const logFiles = entries.filter(
+    (entry) => !entry.isDir && isLogFileName(entry.name),
+  );
+  const levelCounts = records.reduce<Record<string, number>>(
+    (counts, record) => {
+      counts[record.level] = (counts[record.level] ?? 0) + 1;
+      return counts;
+    },
+    {},
+  );
   const visibleRecords = selectedLevels.length
     ? records.filter((record) => selectedLevels.includes(record.level))
     : records;
-  const targetCounts = visibleRecords.reduce<Record<string, number>>((counts, record) => {
-    counts[record.target] = (counts[record.target] ?? 0) + 1;
-    return counts;
-  }, {});
+  const targetCounts = visibleRecords.reduce<Record<string, number>>(
+    (counts, record) => {
+      counts[record.target] = (counts[record.target] ?? 0) + 1;
+      return counts;
+    },
+    {},
+  );
   const sources = Object.entries(targetCounts).sort(([, a], [, b]) => b - a);
 
   async function loadFiles() {
     if (!profile) return;
     setScanning(true);
     try {
-      const result = await invoke<RemoteEntry[]>("list_remote_directory", { profile, path });
+      const result = await invoke<RemoteEntry[]>("list_remote_directory", {
+        profile,
+        path,
+      });
       setEntries(result);
-      setSelected((current) => current.filter((item) => result.some((entry) => entry.path === item)));
+      setSelected((current) =>
+        current.filter((item) => result.some((entry) => entry.path === item)),
+      );
       notify(
         `${result.filter((entry) => !entry.isDir && isLogFileName(entry.name)).length}개의 로그 파일을 찾았습니다.`,
       );
@@ -421,7 +435,9 @@ function Analysis({
       const parsed = files.flatMap((file) => parseTracing(file.content));
       setRecords(parsed);
       setSelectedLevels([]);
-      notify(`${files.length}개 파일에서 tracing 로그 ${parsed.length}건을 분석했습니다.`);
+      notify(
+        `${files.length}개 파일에서 tracing 로그 ${parsed.length}건을 분석했습니다.`,
+      );
     } catch (error) {
       notify(`로그 분석에 실패했습니다: ${String(error)}`);
     } finally {
@@ -435,46 +451,166 @@ function Analysis({
         <div>
           <p>TRACING LOG ANALYSIS</p>
           <h1>원격 로그 분석</h1>
-          <span>세션과 .log 파일을 선택하면 tracing의 레벨과 코드 모듈을 집계합니다.</span>
+          <span>
+            세션과 .log 파일을 선택하면 tracing의 레벨과 코드 모듈을 집계합니다.
+          </span>
         </div>
       </header>
       <section className="analysis-controls">
         <label>
           세션
-          <select value={profileId} onChange={(event) => { setProfileId(event.target.value); setEntries([]); setSelected([]); setRecords([]); }}>
+          <select
+            value={profileId}
+            onChange={(event) => {
+              setProfileId(event.target.value);
+              setEntries([]);
+              setSelected([]);
+              setRecords([]);
+            }}
+          >
             <option value="">세션 선택</option>
-            {profiles.map((item) => <option key={item.id} value={item.id}>{item.name} — {item.username}@{item.host}</option>)}
+            {profiles.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name} — {item.username}@{item.host}
+              </option>
+            ))}
           </select>
         </label>
         <label className="analysis-path">
           로그 폴더
-          <input value={path} onChange={(event) => setPath(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void loadFiles()} placeholder="예: /var/log/service" />
+          <input
+            value={path}
+            onChange={(event) => setPath(event.target.value)}
+            onKeyDown={(event) => event.key === "Enter" && void loadFiles()}
+            placeholder="예: /var/log/service"
+          />
         </label>
-        <button className="primary" disabled={!profile || scanning} onClick={() => void loadFiles()}>파일 찾기</button>
+        <button
+          className="primary"
+          disabled={!profile || scanning}
+          onClick={() => void loadFiles()}
+        >
+          파일 찾기
+        </button>
       </section>
       <div className="analysis-layout">
         <section className="analysis-files card">
-          <header><h2>분석 대상 로그</h2><span>{selected.length}개 선택</span></header>
-          {logFiles.length === 0 ? <p className="analysis-empty">세션과 로그 폴더를 선택한 뒤 “파일 찾기”를 누르세요. 해당 폴더 안의 .log 및 회전 로그 파일을 체크해 여러 개 선택할 수 있습니다.</p> : logFiles.map((file) => (
-            <label className="log-file-choice" key={file.path}>
-              <input type="checkbox" checked={selected.includes(file.path)} onChange={(event) => setSelected((items) => event.target.checked ? [...items, file.path] : items.filter((item) => item !== file.path))} />
-              <span><b>{file.name}</b><small>{file.details}</small></span>
-            </label>
-          ))}
-          <button className="primary analyze-button" disabled={!profile || selected.length === 0 || scanning} onClick={() => void analyze()}>{scanning ? "분석 중…" : "선택 파일 분석"}</button>
-          <small className="analysis-limit">각 파일의 최신 5,000줄만 읽습니다.</small>
+          <header>
+            <h2>분석 대상 로그</h2>
+            <span>{selected.length}개 선택</span>
+          </header>
+          {logFiles.length === 0 ? (
+            <p className="analysis-empty">
+              세션과 로그 폴더를 선택한 뒤 “파일 찾기”를 누르세요. 해당 폴더
+              안의 .log 및 회전 로그 파일을 체크해 여러 개 선택할 수 있습니다.
+            </p>
+          ) : (
+            logFiles.map((file) => (
+              <label className="log-file-choice" key={file.path}>
+                <input
+                  type="checkbox"
+                  checked={selected.includes(file.path)}
+                  onChange={(event) =>
+                    setSelected((items) =>
+                      event.target.checked
+                        ? [...items, file.path]
+                        : items.filter((item) => item !== file.path),
+                    )
+                  }
+                />
+                <span>
+                  <b>{file.name}</b>
+                  <small>{file.details}</small>
+                </span>
+              </label>
+            ))
+          )}
+          <button
+            className="primary analyze-button"
+            disabled={!profile || selected.length === 0 || scanning}
+            onClick={() => void analyze()}
+          >
+            {scanning ? "분석 중…" : "선택 파일 분석"}
+          </button>
+          <small className="analysis-limit">
+            각 파일의 최신 5,000줄만 읽습니다.
+          </small>
         </section>
         <section className="analysis-results">
           <div className="metric-row">
-            <article className="metric"><span>{selectedLevels.length ? "표시 로그" : "분석된 로그"}</span><strong>{visibleRecords.length.toLocaleString()}</strong></article>
-            {Object.entries(levelCounts).map(([level, count]) => <button className={selectedLevels.includes(level) ? `metric level-${level.toLowerCase()} selected-level` : `metric level-${level.toLowerCase()}`} key={level} aria-pressed={selectedLevels.includes(level)} onClick={() => setSelectedLevels((levels) => levels.includes(level) ? levels.filter((item) => item !== level) : [...levels, level])}><span>{level}</span><strong>{count.toLocaleString()}</strong></button>)}
+            <article className="metric">
+              <span>{selectedLevels.length ? "표시 로그" : "분석된 로그"}</span>
+              <strong>{visibleRecords.length.toLocaleString()}</strong>
+            </article>
+            {Object.entries(levelCounts).map(([level, count]) => (
+              <button
+                className={
+                  selectedLevels.includes(level)
+                    ? `metric level-${level.toLowerCase()} selected-level`
+                    : `metric level-${level.toLowerCase()}`
+                }
+                key={level}
+                aria-pressed={selectedLevels.includes(level)}
+                onClick={() =>
+                  setSelectedLevels((levels) =>
+                    levels.includes(level)
+                      ? levels.filter((item) => item !== level)
+                      : [...levels, level],
+                  )
+                }
+              >
+                <span>{level}</span>
+                <strong>{count.toLocaleString()}</strong>
+              </button>
+            ))}
           </div>
-          {selectedLevels.length > 0 && <div className="level-filter-note"><span>{selectedLevels.join(", ")} 로그만 표시 중</span><button onClick={() => setSelectedLevels([])}>필터 해제</button></div>}
+          {selectedLevels.length > 0 && (
+            <div className="level-filter-note">
+              <span>{selectedLevels.join(", ")} 로그만 표시 중</span>
+              <button onClick={() => setSelectedLevels([])}>필터 해제</button>
+            </div>
+          )}
           <section className="card source-table">
-            <header><h2>코드 위치별 로그</h2><span>target / module path</span></header>
-            {sources.length === 0 ? <p className="analysis-empty">분석 결과가 여기에 표시됩니다.</p> : <div>{sources.map(([target, count]) => <div className="source-row" key={target}><code>{target}</code><b>{count.toLocaleString()}건</b></div>)}</div>}
+            <header>
+              <h2>코드 위치별 로그</h2>
+              <span>target / module path</span>
+            </header>
+            {sources.length === 0 ? (
+              <p className="analysis-empty">분석 결과가 여기에 표시됩니다.</p>
+            ) : (
+              <div>
+                {sources.map(([target, count]) => (
+                  <div className="source-row" key={target}>
+                    <code>{target}</code>
+                    <b>{count.toLocaleString()}건</b>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
-          {visibleRecords.length > 0 && <section className="card sample-table"><header><h2>최근 로그 예시</h2></header>{visibleRecords.slice(-20).reverse().map((record, index) => <div className="sample-row" key={`${record.timestamp}-${index}`}><time>{record.timestamp}</time><em className={record.level.toLowerCase()}>{record.level}</em><code>{record.target}</code><span>{record.message}</span></div>)}</section>}
+          {visibleRecords.length > 0 && (
+            <section className="card sample-table">
+              <header>
+                <h2>최근 로그 예시</h2>
+              </header>
+              {visibleRecords
+                .slice(-20)
+                .reverse()
+                .map((record, index) => (
+                  <div
+                    className="sample-row"
+                    key={`${record.timestamp}-${index}`}
+                  >
+                    <time>{record.timestamp}</time>
+                    <em className={record.level.toLowerCase()}>
+                      {record.level}
+                    </em>
+                    <code>{record.target}</code>
+                    <span>{record.message}</span>
+                  </div>
+                ))}
+            </section>
+          )}
         </section>
       </div>
     </section>

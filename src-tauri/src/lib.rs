@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     fs,
     io::{BufRead, BufReader, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{
         Mutex,
@@ -326,7 +326,7 @@ fn find_remote_log_files(
 fn append_ssh_auth_args(
     command: &mut Command,
     profile: &ConnectionProfile,
-    known_hosts_file: &PathBuf,
+    known_hosts_file: &Path,
 ) -> Result<(), String> {
     command
         .arg("-o")

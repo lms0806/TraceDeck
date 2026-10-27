@@ -73,10 +73,12 @@ export function LogDock({
   preview,
   streamId,
   onClose,
+  onOpenTerminal,
 }: {
   preview: RemoteFile;
   streamId: number | null;
   onClose: () => void;
+  onOpenTerminal: () => void;
 }) {
   const dockRef = useRef<HTMLElement>(null);
   const previewScroll = useRef<HTMLPreElement>(null);
@@ -126,9 +128,17 @@ export function LogDock({
           <span>{preview.path}</span>
           <small>{streamId === null ? "준비 중" : "tail -F 추적 중"}</small>
         </div>
-        <IconButton onClick={onClose}>
-          <X size={18} />
-        </IconButton>
+        <div className="flex items-center gap-1">
+          <button
+            className="rounded px-2 py-1 text-[11px] text-[#9fb2c2] hover:bg-[#263746] hover:text-white"
+            onClick={onOpenTerminal}
+          >
+            터미널
+          </button>
+          <IconButton onClick={onClose}>
+            <X size={18} />
+          </IconButton>
+        </div>
       </header>
       <pre
         className="m-0 min-h-0 flex-1 overflow-auto p-[12px_16px] font-mono text-xs leading-[1.55] whitespace-pre-wrap text-[#d0e0ec]"

@@ -67,6 +67,34 @@ pub(crate) fn ssh_command(
     Ok(command)
 }
 
+pub(crate) fn interactive_ssh_arguments(
+    profile: &ConnectionProfile,
+    known_hosts_file: &Path,
+) -> Result<Vec<String>, String> {
+    let mut arguments = vec![
+        "-o".into(),
+        "BatchMode=yes".into(),
+        "-o".into(),
+        "ConnectTimeout=10".into(),
+        "-o".into(),
+        "StrictHostKeyChecking=accept-new".into(),
+        "-o".into(),
+        format!("UserKnownHostsFile={}", known_hosts_file.display()),
+        "-p".into(),
+        profile.port.to_string(),
+        "-tt".into(),
+    ];
+    if profile.auth_kind == "privateKey" {
+        let Some(key_path) = profile.private_key_path.as_deref() else {
+            return Err("개인키 파일이 지정되지 않았습니다.".into());
+        };
+        arguments.push("-i".into());
+        arguments.push(key_path.into());
+    }
+    arguments.push(destination(profile));
+    Ok(arguments)
+}
+
 pub(crate) fn sftp_command(
     profile: &ConnectionProfile,
     known_hosts_file: &Path,

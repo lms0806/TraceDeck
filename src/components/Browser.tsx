@@ -1,10 +1,13 @@
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Terminal } from "lucide-react";
+import { useState } from "react";
 
 import { FileList } from "./browser/FileList";
 import { LogDock } from "./browser/LogDock";
+import { TerminalDock } from "./browser/TerminalDock";
 import type { Profile } from "./browser/types";
 import { useRemoteDirectory } from "./browser/useRemoteDirectory";
 import { useTailStream } from "./browser/useTailStream";
+import { useTerminal } from "./browser/useTerminal";
 import { PrimaryButton } from "./ui/PrimaryButton";
 import { SecondaryButton } from "./ui/SecondaryButton";
 
@@ -19,8 +22,14 @@ export function Browser({
   onCheck: () => void;
   notify: (text: string) => void;
 }) {
+  const [view, setView] = useState<"files" | "terminal">("files");
+  const [showTerminalDock, setShowTerminalDock] = useState(false);
   const directory = useRemoteDirectory(profile, active, notify);
   const tail = useTailStream(profile);
+  const terminal = useTerminal(
+    profile,
+    active && (view === "terminal" || showTerminalDock),
+  );
 
   return (
     <section className="flex min-h-0 flex-1 flex-col">
@@ -29,57 +38,90 @@ export function Browser({
           <span className="offline-dot" /> {profile.username}@{profile.host}:
           {profile.port}
         </div>
-        <button
-          className="rounded bg-[#236d56] px-[9px] py-[7px] text-[#effff8] hover:bg-[#359372]"
-          onClick={onCheck}
-        >
-          연결 확인
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            className={`rounded px-[9px] py-[7px] ${view === "files" ? "bg-[#263b4b] text-white" : "text-[#9fb2c2] hover:bg-[#263746]"}`}
+            onClick={() => setView("files")}
+          >
+            파일
+          </button>
+          <button
+            className={`flex items-center gap-1 rounded px-[9px] py-[7px] ${view === "terminal" ? "bg-[#263b4b] text-white" : "text-[#9fb2c2] hover:bg-[#263746]"}`}
+            onClick={() => setView("terminal")}
+          >
+            <Terminal size={14} /> 터미널
+          </button>
+          <button
+            className="rounded bg-[#236d56] px-[9px] py-[7px] text-[#effff8] hover:bg-[#359372]"
+            onClick={onCheck}
+          >
+            연결 확인
+          </button>
+        </div>
       </header>
-      <div className="flex items-center gap-2 border-b border-[#293846] bg-[#18232e] px-[14px] py-2.5">
-        <SecondaryButton
-          onClick={directory.back}
-          disabled={directory.loading || !directory.canGoBack}
-        >
-          <ChevronLeft size={16} /> 뒤로
-        </SecondaryButton>
-        <SecondaryButton
-          onClick={() => directory.load(directory.path, false)}
-          disabled={directory.loading}
-        >
-          새로고침
-        </SecondaryButton>
-        <label className="flex flex-1 items-center gap-2 text-[11px] text-[#8ba1b4]">
-          <span>원격 경로</span>
-          <input
-            className="min-w-0 flex-1 rounded border border-[#3a5061] bg-[#101820] px-[9px] py-[7px] text-[#e8f0f5]"
-            value={directory.path}
-            onChange={(event) => directory.setPath(event.target.value)}
-            onKeyDown={(event) =>
-              event.key === "Enter" && directory.load(directory.path, true)
-            }
-          />
-        </label>
-        <PrimaryButton
-          onClick={() => directory.load(directory.path, true)}
-          disabled={directory.loading}
-        >
-          {directory.loading ? "불러오는 중…" : "폴더 열기"}
-        </PrimaryButton>
-      </div>
-      <FileList
-        entries={directory.entries}
-        loaded={directory.loaded}
-        loading={directory.loading}
-        onOpenDirectory={(path) => directory.load(path, true)}
-        onOpenFile={tail.openFile}
-      />
-      {tail.preview && (
-        <LogDock
-          preview={tail.preview}
-          streamId={tail.streamId}
-          onClose={tail.close}
+      {view === "terminal" ? (
+        <TerminalDock
+          terminal={terminal}
+          expanded
+          onClose={() => setView("files")}
         />
+      ) : (
+        <>
+          <div className="flex items-center gap-2 border-b border-[#293846] bg-[#18232e] px-[14px] py-2.5">
+            <SecondaryButton
+              onClick={directory.back}
+              disabled={directory.loading || !directory.canGoBack}
+            >
+              <ChevronLeft size={16} /> 뒤로
+            </SecondaryButton>
+            <SecondaryButton
+              onClick={() => directory.load(directory.path, false)}
+              disabled={directory.loading}
+            >
+              새로고침
+            </SecondaryButton>
+            <label className="flex flex-1 items-center gap-2 text-[11px] text-[#8ba1b4]">
+              <span>원격 경로</span>
+              <input
+                className="min-w-0 flex-1 rounded border border-[#3a5061] bg-[#101820] px-[9px] py-[7px] text-[#e8f0f5]"
+                value={directory.path}
+                onChange={(event) => directory.setPath(event.target.value)}
+                onKeyDown={(event) =>
+                  event.key === "Enter" && directory.load(directory.path, true)
+                }
+              />
+            </label>
+            <PrimaryButton
+              onClick={() => directory.load(directory.path, true)}
+              disabled={directory.loading}
+            >
+              {directory.loading ? "불러오는 중…" : "폴더 열기"}
+            </PrimaryButton>
+            <SecondaryButton onClick={() => setShowTerminalDock(true)}>
+              <Terminal size={15} /> 하단 터미널
+            </SecondaryButton>
+          </div>
+          <FileList
+            entries={directory.entries}
+            loaded={directory.loaded}
+            loading={directory.loading}
+            onOpenDirectory={(path) => directory.load(path, true)}
+            onOpenFile={tail.openFile}
+          />
+          {showTerminalDock ? (
+            <TerminalDock
+              terminal={terminal}
+              onClose={() => setShowTerminalDock(false)}
+            />
+          ) : tail.preview ? (
+            <LogDock
+              preview={tail.preview}
+              streamId={tail.streamId}
+              onClose={tail.close}
+              onOpenTerminal={() => setShowTerminalDock(true)}
+            />
+          ) : null}
+        </>
       )}
     </section>
   );

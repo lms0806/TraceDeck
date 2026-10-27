@@ -19,7 +19,7 @@ export default defineConfig({
   rules: {
     cycles: "error",
   },
-  // Tailwind is loaded from the CSS entry point, which static JS/TS analysis
-  // does not treat as a package import.
-  ignoreDependencies: ["tailwindcss"],
+  // These packages are loaded by Vite's CSS/module pipeline, which Knip does
+  // not currently attribute to the React component import graph.
+  ignoreDependencies: ["tailwindcss", "@xterm/xterm", "@xterm/addon-fit"],
 });

@@ -5,7 +5,7 @@ use crate::{
     models::{ConnectionCheck, ConnectionProfile, LogSource, RemoteEntry, RemoteFile},
     sftp,
     ssh_client::{reject_password_auth, ssh_command},
-    state::{AppState, TailStreams},
+    state::{AppState, TailStreams, TerminalSessions},
 };
 
 #[tauri::command]
@@ -27,7 +27,7 @@ pub(crate) fn check_ssh_connection(
     if output.status.success() {
         Ok(ConnectionCheck {
             connected: true,
-            message: "SSH 인증을 확인했습니다. 대화형 터미널 스트림 연결은 다음 단계입니다.".into(),
+            message: "SSH 인증을 확인했습니다.".into(),
         })
     } else {
         let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -40,6 +40,43 @@ pub(crate) fn check_ssh_connection(
             },
         })
     }
+}
+
+#[tauri::command]
+pub(crate) fn start_terminal(
+    profile: ConnectionProfile,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    sessions: State<'_, TerminalSessions>,
+) -> Result<u64, String> {
+    crate::terminal::start_terminal(&profile, &state.known_hosts_file, app, &sessions)
+}
+
+#[tauri::command]
+pub(crate) fn write_terminal(
+    terminal_id: u64,
+    input: String,
+    sessions: State<'_, TerminalSessions>,
+) -> Result<(), String> {
+    crate::terminal::write_terminal(terminal_id, input, &sessions)
+}
+
+#[tauri::command]
+pub(crate) fn stop_terminal(
+    terminal_id: u64,
+    sessions: State<'_, TerminalSessions>,
+) -> Result<(), String> {
+    crate::terminal::stop_terminal(terminal_id, &sessions)
+}
+
+#[tauri::command]
+pub(crate) fn resize_terminal(
+    terminal_id: u64,
+    columns: u16,
+    rows: u16,
+    sessions: State<'_, TerminalSessions>,
+) -> Result<(), String> {
+    crate::terminal::resize_terminal(terminal_id, columns, rows, &sessions)
 }
 
 #[tauri::command]

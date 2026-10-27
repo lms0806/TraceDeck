@@ -128,9 +128,9 @@ function App() {
     setDraft(emptyProfile());
   }
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div className="brand">
+    <main className="relative grid h-screen grid-cols-[280px_1fr] grid-rows-[52px_1fr] bg-[#111820]">
+      <header className="col-span-2 flex items-center gap-[18px] border-b border-[#293846] bg-[#18232e] px-4">
+        <div className="flex items-center gap-2 font-[750] text-white [&>svg]:text-[#50d3a1] [&>small]:ml-1 [&>small]:text-[10px] [&>small]:tracking-[1px] [&>small]:text-[#718397]">
           <CircleDot size={20} />
           <span>Tracing Log</span>
           <small>SFTP FILE BROWSER</small>
@@ -158,7 +158,7 @@ function App() {
         onHome={() => setActiveId("home")}
         onAnalysis={openAnalysis}
       />
-      <section className="workspace">
+      <section className="flex min-h-0 min-w-0 flex-col">
         <TabBar
           tabs={tabs}
           activeId={activeId}
@@ -174,7 +174,9 @@ function App() {
             if (!profile) return [];
             return (
               <div
-                className={tab.id === activeId ? "tab-view" : "tab-view hidden"}
+                className={
+                  tab.id === activeId ? "flex min-h-0 flex-1" : "hidden"
+                }
                 key={tab.id}
               >
                 <Browser
@@ -188,13 +190,17 @@ function App() {
           })}
         {tabs.some((tab) => tab.id === "analysis") && (
           <div
-            className={activeId === "analysis" ? "tab-view" : "tab-view hidden"}
+            className={
+              activeId === "analysis" ? "flex min-h-0 flex-1" : "hidden"
+            }
           >
             <Analysis profiles={profiles} notify={setNotice} />
           </div>
         )}
       </section>
-      <div className="notice">{notice}</div>
+      <div className="absolute bottom-[15px] right-[18px] z-[5] max-w-[470px] rounded-md border border-[#3b5164] bg-[#1d2a36] px-[13px] py-2.5 text-xs text-[#bdcdda] shadow-[0_8px_22px_#0007]">
+        {notice}
+      </div>
       {dialog && (
         <SessionDialog
           draft={draft}
@@ -334,8 +340,8 @@ function Analysis({
   }
 
   return (
-    <section className="analysis-view">
-      <header className="analysis-header">
+    <section className="min-h-0 overflow-auto px-[30px] py-[26px]">
+      <header className="rounded-[9px] border border-[#355365] bg-[linear-gradient(120deg,#1e3f46,#192c39_65%)] px-6 py-[22px] [&_h1]:mb-2 [&_h1]:text-[23px] [&_h1]:text-white [&_p]:mb-[6px] [&_p]:text-[10px] [&_p]:font-extrabold [&_p]:tracking-[1.2px] [&_p]:text-[#59d6a5] [&_span]:text-xs [&_span]:text-[#a8bbc9]">
         <div>
           <p>TRACING LOG ANALYSIS</p>
           <h1>원격 로그 분석</h1>
@@ -344,7 +350,7 @@ function Analysis({
           </span>
         </div>
       </header>
-      <section className="analysis-controls">
+      <section className="my-4 flex items-end gap-2.5 rounded-lg border border-[#2d3d4c] bg-[#17212b] p-[14px] [&_input]:w-full [&_input]:rounded-[5px] [&_input]:border [&_input]:border-[#3c5062] [&_input]:bg-[#101820] [&_input]:p-2 [&_input]:text-[#e6eef4] [&_label]:grid [&_label]:min-w-[230px] [&_label]:gap-1.5 [&_label]:text-[11px] [&_label]:text-[#9eb1c1] [&_select]:w-full [&_select]:rounded-[5px] [&_select]:border [&_select]:border-[#3c5062] [&_select]:bg-[#101820] [&_select]:p-2 [&_select]:text-[#e6eef4]">
         <label>
           세션
           <select
@@ -364,7 +370,7 @@ function Analysis({
             ))}
           </select>
         </label>
-        <label className="analysis-path">
+        <label className="flex-1">
           로그 폴더
           <input
             value={path}
@@ -380,20 +386,23 @@ function Analysis({
           파일 찾기
         </PrimaryButton>
       </section>
-      <div className="analysis-layout">
-        <Panel className="analysis-files">
+      <div className="grid grid-cols-[minmax(260px,0.65fr)_minmax(450px,1.35fr)] gap-4">
+        <Panel className="self-start [&>header]:items-center">
           <header>
             <h2>분석 대상 로그</h2>
             <span>{selected.length}개 선택</span>
           </header>
           {logFiles.length === 0 ? (
-            <p className="analysis-empty">
+            <p className="text-xs leading-[1.55] text-[#7e96a8]">
               세션과 로그 폴더를 선택한 뒤 “파일 찾기”를 누르세요. 해당 폴더
               안의 .log 및 회전 로그 파일을 체크해 여러 개 선택할 수 있습니다.
             </p>
           ) : (
             logFiles.map((file) => (
-              <label className="log-file-choice" key={file.path}>
+              <label
+                className="flex cursor-pointer gap-[9px] border-b border-[#293947] px-[3px] py-2.5 [&>input]:accent-[#50d3a1] [&>span]:grid [&>span]:min-w-0 [&>span]:gap-[3px] [&_b]:overflow-hidden [&_b]:text-xs [&_b]:text-ellipsis [&_small]:overflow-hidden [&_small]:whitespace-nowrap [&_small]:text-ellipsis [&_small]:font-mono [&_small]:text-[10px] [&_small]:text-[#7c94a6]"
+                key={file.path}
+              >
                 <input
                   type="checkbox"
                   checked={selected.includes(file.path)}
@@ -413,29 +422,25 @@ function Analysis({
             ))
           )}
           <PrimaryButton
-            className="analyze-button"
+            className="mt-[14px]"
             disabled={!profile || selected.length === 0 || scanning}
             onClick={() => void analyze()}
           >
             {scanning ? "분석 중…" : "선택 파일 분석"}
           </PrimaryButton>
-          <small className="analysis-limit">
+          <small className="mt-[9px] block text-[10px] text-[#72899b]">
             각 파일의 최신 5,000줄만 읽습니다.
           </small>
         </Panel>
         <section className="analysis-results">
-          <div className="metric-row">
-            <article className="metric">
+          <div className="mb-4 flex flex-wrap gap-2.5">
+            <article className="min-w-[110px] rounded-lg border border-[#2d3d4c] bg-[#17212b] p-[13px] [&>span]:block [&>span]:text-[10px] [&>span]:font-bold [&>span]:text-[#90a4b5] [&>strong]:mt-[5px] [&>strong]:block [&>strong]:text-[21px] [&>strong]:text-[#e7f4fb]">
               <span>{selectedLevels.length ? "표시 로그" : "분석된 로그"}</span>
               <strong>{visibleRecords.length.toLocaleString()}</strong>
             </article>
             {Object.entries(levelCounts).map(([level, count]) => (
               <button
-                className={
-                  selectedLevels.includes(level)
-                    ? `metric level-${level.toLowerCase()} selected-level`
-                    : `metric level-${level.toLowerCase()}`
-                }
+                className={`min-w-[110px] rounded-lg border p-[13px] text-left transition-colors hover:bg-[#21303c] [&>span]:block [&>span]:text-[10px] [&>span]:font-bold [&>span]:text-[#90a4b5] [&>strong]:mt-[5px] [&>strong]:block [&>strong]:text-[21px] ${level === "ERROR" ? "border-[#6a343b] [&>strong]:text-[#fa9893]" : level === "WARN" ? "border-[#705621] [&>strong]:text-[#e7b65e]" : "border-[#2b6251] [&>strong]:text-[#6fd1aa]"} ${selectedLevels.includes(level) ? "bg-[#1a3b35] shadow-[inset_0_0_0_1px_#58d6a540]" : "bg-[#17212b]"}`}
                 key={level}
                 aria-pressed={selectedLevels.includes(level)}
                 onClick={() =>
@@ -452,22 +457,32 @@ function Analysis({
             ))}
           </div>
           {selectedLevels.length > 0 && (
-            <div className="level-filter-note">
+            <div className="-mt-[7px] mb-4 flex items-center justify-between text-[11px] text-[#90bfae]">
               <span>{selectedLevels.join(", ")} 로그만 표시 중</span>
-              <button onClick={() => setSelectedLevels([])}>필터 해제</button>
+              <button
+                className="text-[11px] text-[#78dba9] underline"
+                onClick={() => setSelectedLevels([])}
+              >
+                필터 해제
+              </button>
             </div>
           )}
-          <Panel className="source-table">
+          <Panel className="mb-4 [&>header]:items-center">
             <header>
               <h2>코드 위치별 로그</h2>
               <span>target / module path</span>
             </header>
             {sources.length === 0 ? (
-              <p className="analysis-empty">분석 결과가 여기에 표시됩니다.</p>
+              <p className="text-xs leading-[1.55] text-[#7e96a8]">
+                분석 결과가 여기에 표시됩니다.
+              </p>
             ) : (
               <div>
                 {sources.map(([target, count]) => (
-                  <div className="source-row" key={target}>
+                  <div
+                    className="flex justify-between gap-3 border-b border-[#293947] py-2.5 last:border-0"
+                    key={target}
+                  >
                     <code>{target}</code>
                     <b>{count.toLocaleString()}건</b>
                   </div>
@@ -476,7 +491,7 @@ function Analysis({
             )}
           </Panel>
           {visibleRecords.length > 0 && (
-            <Panel className="sample-table">
+            <Panel className="mb-4 [&>header]:items-center">
               <header>
                 <h2>최근 로그 예시</h2>
               </header>
@@ -485,11 +500,13 @@ function Analysis({
                 .reverse()
                 .map((record, index) => (
                   <div
-                    className="sample-row"
+                    className="grid grid-cols-[170px_52px_minmax(170px,0.7fr)_1.3fr] items-center gap-[9px] border-b border-[#293947] py-2 font-mono text-[10px] [&>code]:overflow-hidden [&>code]:whitespace-nowrap [&>code]:text-ellipsis [&>code]:text-[#a9c9dd] [&>span]:overflow-hidden [&>span]:whitespace-nowrap [&>span]:text-ellipsis [&>span]:text-[#c5d4df] [&>time]:text-[#7894aa]"
                     key={`${record.timestamp}-${index}`}
                   >
                     <time>{record.timestamp}</time>
-                    <em className={record.level.toLowerCase()}>
+                    <em
+                      className={`w-max rounded-[3px] px-1 py-0.5 not-italic font-bold ${record.level === "ERROR" ? "bg-[#4c2529] text-[#fa9893]" : record.level === "WARN" ? "bg-[#493716] text-[#e7b65e]" : "bg-[#153d32] text-[#6fd1aa]"}`}
+                    >
                       {record.level}
                     </em>
                     <code>{record.target}</code>
@@ -532,9 +549,12 @@ function SessionDialog({
       setDraft({ ...draft, privateKeyPath: file, authKind: "privateKey" });
   }
   return (
-    <div className="modal-backdrop">
-      <form className="session-dialog" onSubmit={submit}>
-        <header>
+    <div className="absolute inset-0 z-10 grid place-items-center bg-[#070b0fc9]">
+      <form
+        className="w-[490px] rounded-[9px] border border-[#405565] bg-[#17222c] p-5 shadow-[0_20px_70px_#000] [&>label]:mt-[14px] [&>label]:grid [&>label]:gap-1.5 [&>label]:text-[11px] [&>label]:text-[#9eb1c1] [&_input]:w-full [&_input]:rounded-[5px] [&_input]:border [&_input]:border-[#3c5062] [&_input]:bg-[#101820] [&_input]:p-[9px] [&_input]:text-xs [&_input]:text-[#e6eef4] [&_input:focus]:border-[#55cda0]"
+        onSubmit={submit}
+      >
+        <header className="mb-4 flex items-start justify-between [&_h2]:m-0 [&_h2]:text-lg [&_h2]:text-[#eff7fc]">
           <div>
             <p className="mb-[6px] text-[10px] font-extrabold tracking-[1.2px] text-[#59d6a5]">
               NEW SFTP SESSION
@@ -556,7 +576,7 @@ function SessionDialog({
             onChange={(e) => update("name", e.target.value)}
           />
         </label>
-        <div className="field-grid">
+        <div className="grid grid-cols-[1fr_110px] gap-3 [&_label]:mt-[14px] [&_label]:grid [&_label]:gap-1.5 [&_label]:text-[11px] [&_label]:text-[#9eb1c1]">
           <label>
             호스트
             <input
@@ -586,8 +606,12 @@ function SessionDialog({
             <KeyRound size={14} /> 키 파일 선택
           </button>
         </div>
-        <footer>
-          <button type="button" onClick={close}>
+        <footer className="mt-5 flex justify-end gap-2">
+          <button
+            className="border-0 bg-transparent px-[11px] py-2 text-[#9aafbf]"
+            type="button"
+            onClick={close}
+          >
             취소
           </button>
           <PrimaryButton type="submit">저장하고 열기</PrimaryButton>

@@ -36,8 +36,8 @@ export function Browser({
     <section className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-12 items-center justify-between border-b border-[#293846] px-[18px] text-xs text-[#9fb2c2]">
         <div>
-          <span className="offline-dot" /> {profile.username}@{profile.host}:
-          {profile.port}
+          <span className="mr-1.5 inline-block h-[7px] w-[7px] rounded-full bg-[#e5b662]" />{" "}
+          {profile.username}@{profile.host}:{profile.port}
         </div>
         <div className="flex items-center gap-2">
           <button

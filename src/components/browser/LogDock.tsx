@@ -1,4 +1,10 @@
-import { CSSProperties, useEffect, useRef, type PointerEvent } from "react";
+import {
+  CSSProperties,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type PointerEvent,
+} from "react";
 import { File, X } from "lucide-react";
 
 import { IconButton } from "../ui/IconButton";
@@ -86,11 +92,21 @@ export function LogDock({
 }) {
   const previewScroll = useRef<HTMLPreElement>(null);
   const stickToBottom = useRef(true);
+  const scrollFrame = useRef<number | null>(null);
 
-  useEffect(() => {
-    const element = previewScroll.current;
-    if (element && stickToBottom.current)
-      element.scrollTop = element.scrollHeight;
+  useLayoutEffect(() => {
+    if (!stickToBottom.current) return;
+    if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current);
+    scrollFrame.current = requestAnimationFrame(() => {
+      const element = previewScroll.current;
+      if (element && stickToBottom.current)
+        element.scrollTop = element.scrollHeight;
+      scrollFrame.current = null;
+    });
+    return () => {
+      if (scrollFrame.current !== null)
+        cancelAnimationFrame(scrollFrame.current);
+    };
   }, [preview.content]);
 
   function beginResize(event: PointerEvent<HTMLDivElement>) {

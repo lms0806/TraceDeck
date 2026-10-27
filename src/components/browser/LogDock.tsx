@@ -1,4 +1,4 @@
-import { CSSProperties, useEffect, useRef } from "react";
+import { CSSProperties, useEffect, useRef, type PointerEvent } from "react";
 import { File, X } from "lucide-react";
 
 import { IconButton } from "../ui/IconButton";
@@ -74,13 +74,16 @@ export function LogDock({
   streamId,
   onClose,
   onOpenTerminal,
+  height,
+  onHeightChange,
 }: {
   preview: RemoteFile;
   streamId: number | null;
   onClose: () => void;
   onOpenTerminal: () => void;
+  height: number;
+  onHeightChange: (height: number) => void;
 }) {
-  const dockRef = useRef<HTMLElement>(null);
   const previewScroll = useRef<HTMLPreElement>(null);
   const stickToBottom = useRef(true);
 
@@ -90,51 +93,53 @@ export function LogDock({
       element.scrollTop = element.scrollHeight;
   }, [preview.content]);
 
-  useEffect(() => {
-    const dock = dockRef.current;
-    if (!dock) return;
-    const handle = document.createElement("div");
-    handle.className = "dock-resize-handle";
-    const begin = (event: PointerEvent) => {
-      event.preventDefault();
-      const startY = event.clientY;
-      const startHeight = dock.getBoundingClientRect().height;
-      const move = (moveEvent: PointerEvent) => {
-        dock.style.height = `${Math.max(150, Math.min(window.innerHeight * 0.75, startHeight + startY - moveEvent.clientY))}px`;
-      };
-      const stop = () => {
-        window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", stop);
-      };
-      window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", stop);
+  function beginResize(event: PointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const startY = event.clientY;
+    const move = (moveEvent: globalThis.PointerEvent) => {
+      onHeightChange(
+        Math.max(
+          150,
+          Math.min(
+            window.innerHeight * 0.75,
+            height + startY - moveEvent.clientY,
+          ),
+        ),
+      );
     };
-    handle.addEventListener("pointerdown", begin);
-    dock.prepend(handle);
-    return () => {
-      handle.removeEventListener("pointerdown", begin);
-      handle.remove();
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
     };
-  }, []);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  }
 
   return (
     <section
-      className="file-preview-dock flex h-[310px] min-h-[150px] max-h-[75vh] flex-none flex-col overflow-hidden border-t-[3px] border-[#3a5264] bg-[#0d141b]"
-      ref={dockRef}
+      className="file-preview-dock flex min-h-[150px] max-h-[75vh] flex-none flex-col overflow-hidden border-t-[3px] border-[#3a5264] bg-[#0d141b]"
+      style={{ height }}
     >
+      <div className="dock-resize-handle" onPointerDown={beginResize} />
       <header className="flex h-[38px] items-center justify-between border-b border-[#293d4d] px-3 text-xs text-[#ccdce7]">
-        <div className="flex min-w-0 items-center gap-[7px] [&>span]:overflow-hidden [&>span]:text-ellipsis [&>span]:whitespace-nowrap [&>small]:whitespace-nowrap [&>small]:rounded-sm [&>small]:bg-[#153d32] [&>small]:px-[5px] [&>small]:py-0.5 [&>small]:text-[10px] [&>small]:text-[#74d6ac]">
-          <File size={16} />
-          <span>{preview.path}</span>
-          <small>{streamId === null ? "준비 중" : "tail -F 추적 중"}</small>
-        </div>
-        <div className="flex items-center gap-1">
+        <div className="flex min-w-0 items-center gap-1">
+          <button className="flex min-w-0 items-center gap-[7px] rounded bg-[#263b4b] px-2 py-1 text-[#f1f7fb]">
+            <File size={15} />
+            <span className="overflow-hidden text-ellipsis whitespace-nowrap">
+              {preview.path}
+            </span>
+            <small className="whitespace-nowrap rounded-sm bg-[#153d32] px-[5px] py-0.5 text-[10px] text-[#74d6ac]">
+              {streamId === null ? "준비 중" : "tail -F 추적 중"}
+            </small>
+          </button>
           <button
-            className="rounded px-2 py-1 text-[11px] text-[#9fb2c2] hover:bg-[#263746] hover:text-white"
+            className="rounded px-2 py-1 text-[#9fb2c2] hover:bg-[#263746] hover:text-white"
             onClick={onOpenTerminal}
           >
             터미널
           </button>
+        </div>
+        <div className="flex items-center gap-1">
           <IconButton onClick={onClose}>
             <X size={18} />
           </IconButton>

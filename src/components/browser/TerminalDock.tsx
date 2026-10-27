@@ -1,7 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type PointerEvent } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as Xterm } from "@xterm/xterm";
-import { Terminal, Trash2, X } from "lucide-react";
+import { File, Terminal, Trash2, X } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 
 import { IconButton } from "../ui/IconButton";
@@ -18,10 +18,18 @@ type TerminalState = {
 export function TerminalDock({
   terminal,
   onClose,
+  logPath,
+  onShowLog,
+  height,
+  onHeightChange,
   expanded = false,
 }: {
   terminal: TerminalState;
   onClose: () => void;
+  logPath?: string;
+  onShowLog?: () => void;
+  height?: number;
+  onHeightChange?: (height: number) => void;
   expanded?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -86,21 +94,61 @@ export function TerminalDock({
     renderedOutput.current = terminal.output;
   }, [terminal.output]);
 
+  function beginResize(event: PointerEvent<HTMLDivElement>) {
+    if (!onHeightChange || height === undefined) return;
+    event.preventDefault();
+    const startY = event.clientY;
+    const move = (moveEvent: globalThis.PointerEvent) => {
+      onHeightChange(
+        Math.max(
+          150,
+          Math.min(
+            window.innerHeight * 0.75,
+            height + startY - moveEvent.clientY,
+          ),
+        ),
+      );
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  }
+
   return (
     <section
       className={`file-preview-dock flex min-h-0 flex-col overflow-hidden border-t-[3px] border-[#3a5264] bg-[#0d141b] ${
-        expanded ? "flex-1" : "h-[310px] flex-none"
+        expanded ? "flex-1" : "min-h-[150px] max-h-[75vh] flex-none"
       }`}
+      style={expanded ? undefined : { height }}
     >
+      {!expanded && (
+        <div className="dock-resize-handle" onPointerDown={beginResize} />
+      )}
       <header className="flex h-[38px] items-center justify-between border-b border-[#293d4d] px-3 text-xs text-[#ccdce7]">
-        <div className="flex items-center gap-[7px]">
-          <Terminal size={16} />
-          <span>SSH 터미널</span>
-          <small className="rounded-sm bg-[#153d32] px-[5px] py-0.5 text-[10px] text-[#74d6ac]">
-            {terminal.starting || terminal.terminalId === null
-              ? "연결 중"
-              : "연결됨"}
-          </small>
+        <div className="flex min-w-0 items-center gap-1">
+          {logPath && onShowLog && (
+            <button
+              className="flex min-w-0 items-center gap-1 rounded px-2 py-1 text-[#9fb2c2] hover:bg-[#263746] hover:text-white"
+              onClick={onShowLog}
+            >
+              <File size={15} />
+              <span className="max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap">
+                {logPath}
+              </span>
+            </button>
+          )}
+          <span className="flex items-center gap-[7px] rounded bg-[#263b4b] px-2 py-1 text-[#f1f7fb]">
+            <Terminal size={16} />
+            <span>터미널</span>
+            <small className="rounded-sm bg-[#153d32] px-[5px] py-0.5 text-[10px] text-[#74d6ac]">
+              {terminal.starting || terminal.terminalId === null
+                ? "연결 중"
+                : "연결됨"}
+            </small>
+          </span>
         </div>
         <div className="flex items-center gap-1">
           <IconButton aria-label="터미널 출력 지우기" onClick={terminal.clear}>

@@ -24,6 +24,7 @@ export function Browser({
 }) {
   const [view, setView] = useState<"files" | "terminal">("files");
   const [showTerminalDock, setShowTerminalDock] = useState(false);
+  const [dockHeight, setDockHeight] = useState(310);
   const directory = useRemoteDirectory(profile, active, notify);
   const tail = useTailStream(profile);
   const terminal = useTerminal(
@@ -106,12 +107,21 @@ export function Browser({
             loaded={directory.loaded}
             loading={directory.loading}
             onOpenDirectory={(path) => directory.load(path, true)}
-            onOpenFile={tail.openFile}
+            onOpenFile={(entry) => {
+              setShowTerminalDock(false);
+              void tail.openFile(entry);
+            }}
           />
           {showTerminalDock ? (
             <TerminalDock
               terminal={terminal}
               onClose={() => setShowTerminalDock(false)}
+              logPath={tail.preview?.path}
+              height={dockHeight}
+              onHeightChange={setDockHeight}
+              onShowLog={
+                tail.preview ? () => setShowTerminalDock(false) : undefined
+              }
             />
           ) : tail.preview ? (
             <LogDock
@@ -119,6 +129,8 @@ export function Browser({
               streamId={tail.streamId}
               onClose={tail.close}
               onOpenTerminal={() => setShowTerminalDock(true)}
+              height={dockHeight}
+              onHeightChange={setDockHeight}
             />
           ) : null}
         </>

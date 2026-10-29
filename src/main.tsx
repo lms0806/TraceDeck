@@ -600,9 +600,15 @@ function SessionDialog({
             onChange={(e) => update("username", e.target.value)}
           />
         </label>
-        <div className="key-picker">
-          <span>{draft.privateKeyPath ?? "선택한 개인키가 없습니다."}</span>
-          <button type="button" onClick={chooseKey}>
+        <div className="mt-4 flex min-w-0 items-center gap-2 rounded-md border border-[#3c5062] bg-[#101820] p-2">
+          <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap px-1 text-xs text-[#9eb1c1]">
+            {draft.privateKeyPath ?? "선택한 개인키가 없습니다."}
+          </span>
+          <button
+            className="flex flex-none items-center gap-1.5 rounded border border-[#3c695f] bg-[#17352e] px-2.5 py-1.5 text-[11px] font-bold text-[#78dfb5] hover:bg-[#21483e]"
+            type="button"
+            onClick={chooseKey}
+          >
             <KeyRound size={14} /> 키 파일 선택
           </button>
         </div>

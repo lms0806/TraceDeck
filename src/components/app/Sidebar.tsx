@@ -6,7 +6,6 @@ import {
   Plus,
   Search,
   Server,
-  ShieldCheck,
   X,
 } from "lucide-react";
 
@@ -134,9 +133,6 @@ export function Sidebar({
           onClick={onAnalysis}
         >
           <ChartNoAxesCombined size={16} /> 분석
-        </button>
-        <button className="flex gap-2 rounded border-0 bg-transparent p-2 text-left text-xs text-[#92a6b8] hover:bg-[#202d39]">
-          <ShieldCheck size={16} /> 보안 상태
         </button>
       </div>
     </aside>

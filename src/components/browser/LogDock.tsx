@@ -1,6 +1,5 @@
 import {
   CSSProperties,
-  useEffect,
   useLayoutEffect,
   useRef,
   type PointerEvent,

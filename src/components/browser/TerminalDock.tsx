@@ -73,9 +73,32 @@ export function TerminalDock({
     const inputSubscription = xterm.onData((input) => {
       void terminalRef.current.write(input);
     });
+    const copySelection = () => {
+      const selection = xterm.getSelection();
+      if (selection) void navigator.clipboard.writeText(selection);
+    };
+    const pasteClipboard = () => {
+      void navigator.clipboard.readText().then((text) => {
+        if (text) return terminalRef.current.write(text);
+      });
+    };
+    const handleClipboardShortcut = (event: KeyboardEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      const key = event.key.toLowerCase();
+      if (key === "c" && xterm.hasSelection()) {
+        event.preventDefault();
+        copySelection();
+      }
+      if (key === "v") {
+        event.preventDefault();
+        pasteClipboard();
+      }
+    };
+    container.addEventListener("keydown", handleClipboardShortcut, true);
     return () => {
       inputSubscription.dispose();
       resizeObserver.disconnect();
+      container.removeEventListener("keydown", handleClipboardShortcut, true);
       xterm.dispose();
       xtermRef.current = null;
     };

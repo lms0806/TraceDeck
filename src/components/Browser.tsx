@@ -1,4 +1,4 @@
-import { ChevronLeft, Terminal } from "lucide-react";
+import { Terminal } from "lucide-react";
 import { useState } from "react";
 
 import { FileList } from "./browser/FileList";
@@ -70,12 +70,6 @@ export function Browser({
         <>
           <div className="flex items-center gap-2 border-b border-[#293846] bg-[#18232e] px-[14px] py-2.5">
             <SecondaryButton
-              onClick={directory.back}
-              disabled={directory.loading || !directory.canGoBack}
-            >
-              <ChevronLeft size={16} /> 뒤로
-            </SecondaryButton>
-            <SecondaryButton
               onClick={() => directory.load(directory.path, false)}
               disabled={directory.loading}
             >
@@ -107,6 +101,8 @@ export function Browser({
             loaded={directory.loaded}
             loading={directory.loading}
             onOpenDirectory={(path) => directory.load(path, true)}
+            onOpenParent={directory.parent}
+            canOpenParent={directory.canOpenParent}
             onOpenFile={(entry) => {
               setShowTerminalDock(false);
               void tail.openFile(entry);

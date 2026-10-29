@@ -11,7 +11,6 @@ export function useRemoteDirectory(
   notify: (text: string) => void,
 ) {
   const [path, setPath] = useState(".");
-  const [history, setHistory] = useState<string[]>([]);
   const [entries, setEntries] = useState<RemoteEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -20,10 +19,10 @@ export function useRemoteDirectory(
   const directoryCache = useRef(new Map<string, CachedDirectory>());
   const entriesHash = useRef("");
 
-  async function load(next: string, saveHistory: boolean, silent = false) {
+  async function load(next: string, _saveHistory: boolean, silent = false) {
     if (requestInProgress.current) {
       if (!silent)
-        queuedNavigation.current = () => void load(next, saveHistory);
+        queuedNavigation.current = () => void load(next, _saveHistory);
       return;
     }
     const cached = directoryCache.current.get(next);
@@ -33,7 +32,6 @@ export function useRemoteDirectory(
         .join("\n");
       setEntries(cached.entries);
       setLoaded(true);
-      if (saveHistory && next !== path) setHistory((items) => [...items, path]);
       setPath(next);
       if (Date.now() - cached.readAt < 8_000) return;
       silent = true;
@@ -57,8 +55,6 @@ export function useRemoteDirectory(
         setEntries(result);
       }
       directoryCache.current.set(next, { entries: result, readAt: Date.now() });
-      if (!cached && saveHistory && next !== path)
-        setHistory((items) => [...items, path]);
       setPath(next);
       if (!silent)
         notify(`${next} 폴더에서 ${result.length}개 항목을 읽었습니다.`);
@@ -81,11 +77,21 @@ export function useRemoteDirectory(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, loaded, path, profile]);
 
-  function back() {
-    const previous = history.at(-1);
-    if (!previous) return;
-    setHistory((items) => items.slice(0, -1));
-    void load(previous, false);
+  function parentPath(currentPath: string) {
+    if (currentPath === "/") return "/";
+    const normalized = currentPath.replace(/\/+$/, "");
+    if (normalized === ".") return "..";
+    if (normalized === "..") return "../..";
+    if (normalized.split("/").every((segment) => segment === ".."))
+      return `${normalized}/..`;
+    const separator = normalized.lastIndexOf("/");
+    if (separator < 0) return "..";
+    if (separator === 0) return "/";
+    return normalized.slice(0, separator);
+  }
+
+  function parent() {
+    void load(parentPath(path), false);
   }
 
   return {
@@ -94,8 +100,8 @@ export function useRemoteDirectory(
     entries,
     loaded,
     loading,
-    canGoBack: history.length > 0,
     load,
-    back,
+    parent,
+    canOpenParent: path !== "/",
   };
 }

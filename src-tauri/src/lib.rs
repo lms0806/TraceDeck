@@ -37,6 +37,8 @@ pub fn run() {
             remote::list_remote_directory,
             remote::delete_remote_entry,
             remote::rename_remote_entry,
+            remote::create_remote_directory,
+            remote::create_remote_file,
             remote::find_remote_log_files,
             remote::read_remote_file,
             remote::read_remote_log_files,

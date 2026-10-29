@@ -109,6 +109,26 @@ pub(crate) fn rename_remote_entry(
 }
 
 #[tauri::command]
+pub(crate) fn create_remote_directory(
+    profile: ConnectionProfile,
+    parent_path: String,
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    sftp::create_directory(&profile, &parent_path, &name, &state.known_hosts_file)
+}
+
+#[tauri::command]
+pub(crate) fn create_remote_file(
+    profile: ConnectionProfile,
+    parent_path: String,
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    sftp::create_empty_file(&profile, &parent_path, &name, &state.known_hosts_file)
+}
+
+#[tauri::command]
 pub(crate) fn find_remote_log_files(
     profile: ConnectionProfile,
     path: String,

@@ -70,6 +70,22 @@ export function Browser({
     }
   }
 
+  async function createEntry(kind: "file" | "directory") {
+    const label = kind === "file" ? "파일" : "폴더";
+    const name = window.prompt(`새 ${label} 이름을 입력하세요.`)?.trim();
+    if (!name) return;
+    try {
+      await invoke(
+        kind === "file" ? "create_remote_file" : "create_remote_directory",
+        { profile, parentPath: directory.path, name },
+      );
+      notify(`${name} ${label}을(를) 생성했습니다.`);
+      await directory.load(directory.path, false);
+    } catch (error) {
+      notify(`${label}을(를) 생성하지 못했습니다: ${String(error)}`);
+    }
+  }
+
   return (
     <section className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-12 items-center justify-between border-b border-[#293846] px-[18px] text-xs text-[#9fb2c2]">
@@ -147,6 +163,8 @@ export function Browser({
             }}
             onDeleteEntry={(entry) => void deleteEntry(entry)}
             onRenameEntry={(entry) => void renameEntry(entry)}
+            onCreateFile={() => void createEntry("file")}
+            onCreateDirectory={() => void createEntry("directory")}
           />
           {showTerminalDock ? (
             <TerminalDock

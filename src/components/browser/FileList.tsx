@@ -20,6 +20,8 @@ export function FileList({
   onOpenFile,
   onDeleteEntry,
   onRenameEntry,
+  onCreateFile,
+  onCreateDirectory,
 }: {
   entries: RemoteEntry[];
   loaded: boolean;
@@ -30,9 +32,11 @@ export function FileList({
   onOpenFile: (entry: RemoteEntry) => void;
   onDeleteEntry: (entry: RemoteEntry) => void;
   onRenameEntry: (entry: RemoteEntry) => void;
+  onCreateFile: () => void;
+  onCreateDirectory: () => void;
 }) {
   const [contextMenu, setContextMenu] = useState<{
-    entry: RemoteEntry;
+    entry?: RemoteEntry;
     x: number;
     y: number;
   } | null>(null);
@@ -62,7 +66,14 @@ export function FileList({
           목록은 변경된 경우에만 갱신됩니다.
         </p>
       </aside>
-      <section className="min-w-0 overflow-auto bg-[#111920]">
+      <section
+        className="min-w-0 overflow-auto bg-[#111920]"
+        onContextMenu={(event) => {
+          if ((event.target as HTMLElement).closest("[data-entry]")) return;
+          event.preventDefault();
+          setContextMenu({ x: event.clientX, y: event.clientY });
+        }}
+      >
         <header className="border-b border-[#293846] px-[15px] py-2.5 text-[10px] tracking-[.7px] text-[#71879a]">
           <div className="grid grid-cols-[minmax(240px,1fr)_minmax(280px,1.4fr)] gap-[15px]">
             <span>이름</span>
@@ -102,6 +113,7 @@ export function FileList({
           <button
             className="grid w-full grid-cols-[minmax(240px,1fr)_minmax(280px,1.4fr)] gap-[15px] border-0 border-b border-[#1e2b36] bg-transparent px-[15px] py-[9px] text-left text-[#cbd8e2] hover:bg-[#1b2a35] [&>span]:flex [&>span]:items-center [&>span]:gap-2 [&_b]:text-xs [&_b]:font-[550] [&_small]:overflow-hidden [&_small]:text-ellipsis [&_small]:whitespace-nowrap [&_small]:font-mono [&_small]:text-[10px] [&_small]:text-[#7c94a6]"
             key={entry.path}
+            data-entry
             onClick={() =>
               entry.isDir ? onOpenDirectory(entry.path) : onOpenFile(entry)
             }
@@ -133,24 +145,49 @@ export function FileList({
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(event) => event.stopPropagation()}
         >
-          <button
-            className="w-full rounded px-2.5 py-2 text-left text-xs text-[#d6e4ed] hover:bg-[#294052]"
-            onClick={() => {
-              onRenameEntry(contextMenu.entry);
-              setContextMenu(null);
-            }}
-          >
-            이름 변경
-          </button>
-          <button
-            className="w-full rounded px-2.5 py-2 text-left text-xs text-[#ffaaa5] hover:bg-[#41272a]"
-            onClick={() => {
-              onDeleteEntry(contextMenu.entry);
-              setContextMenu(null);
-            }}
-          >
-            삭제
-          </button>
+          {contextMenu.entry ? (
+            <>
+              <button
+                className="w-full rounded px-2.5 py-2 text-left text-xs text-[#d6e4ed] hover:bg-[#294052]"
+                onClick={() => {
+                  onRenameEntry(contextMenu.entry!);
+                  setContextMenu(null);
+                }}
+              >
+                이름 변경
+              </button>
+              <button
+                className="w-full rounded px-2.5 py-2 text-left text-xs text-[#ffaaa5] hover:bg-[#41272a]"
+                onClick={() => {
+                  onDeleteEntry(contextMenu.entry!);
+                  setContextMenu(null);
+                }}
+              >
+                삭제
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className="w-full rounded px-2.5 py-2 text-left text-xs text-[#d6e4ed] hover:bg-[#294052]"
+                onClick={() => {
+                  onCreateFile();
+                  setContextMenu(null);
+                }}
+              >
+                새 파일
+              </button>
+              <button
+                className="w-full rounded px-2.5 py-2 text-left text-xs text-[#d6e4ed] hover:bg-[#294052]"
+                onClick={() => {
+                  onCreateDirectory();
+                  setContextMenu(null);
+                }}
+              >
+                새 폴더
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

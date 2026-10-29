@@ -3,7 +3,8 @@ use std::{io::Write, path::Path, process::Stdio};
 use crate::{
     models::{ConnectionProfile, RemoteEntry},
     ssh_client::{
-        escape_remote_shell_path, reject_password_auth, sftp_command, validate_remote_path,
+        escape_remote_shell_path, reject_password_auth, sftp_command, ssh_command,
+        validate_remote_path,
     },
 };
 
@@ -86,6 +87,51 @@ pub(crate) fn rename_entry(
     )
 }
 
+pub(crate) fn create_directory(
+    profile: &ConnectionProfile,
+    parent_path: &str,
+    name: &str,
+    known_hosts_file: &Path,
+) -> Result<(), String> {
+    reject_password_auth(profile, "폴더 생성")?;
+    validate_remote_path(parent_path)?;
+    validate_entry_name(name)?;
+    let path = child_path(parent_path, name);
+    run_sftp_batch(
+        profile,
+        known_hosts_file,
+        format!("mkdir \"{}\"\nquit\n", escape_remote_shell_path(&path)),
+        "원격 폴더를 생성하지 못했습니다.",
+    )
+}
+
+pub(crate) fn create_empty_file(
+    profile: &ConnectionProfile,
+    parent_path: &str,
+    name: &str,
+    known_hosts_file: &Path,
+) -> Result<(), String> {
+    reject_password_auth(profile, "파일 생성")?;
+    validate_remote_path(parent_path)?;
+    validate_entry_name(name)?;
+    let path = child_path(parent_path, name);
+    let mut command = ssh_command(profile, known_hosts_file)?;
+    command.arg(format!("touch -- \"{}\"", escape_remote_shell_path(&path)));
+    let output = command
+        .output()
+        .map_err(|error| format!("Windows OpenSSH를 실행하지 못했습니다: {error}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(if error.is_empty() {
+            "원격 파일을 생성하지 못했습니다.".into()
+        } else {
+            error
+        })
+    }
+}
+
 fn run_sftp_batch(
     profile: &ConnectionProfile,
     known_hosts_file: &Path,
@@ -137,6 +183,14 @@ fn renamed_path(path: &str, new_name: &str) -> String {
     }
 }
 
+fn child_path(parent_path: &str, name: &str) -> String {
+    if parent_path == "/" {
+        format!("/{name}")
+    } else {
+        format!("{}/{}", parent_path.trim_end_matches('/'), name)
+    }
+}
+
 pub(crate) fn parse_listing(output: &str, requested_path: &str) -> Vec<RemoteEntry> {
     let base = if requested_path == "/" {
         "/"
@@ -172,7 +226,7 @@ pub(crate) fn parse_listing(output: &str, requested_path: &str) -> Vec<RemoteEnt
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_listing, renamed_path, validate_entry_name};
+    use super::{child_path, parse_listing, renamed_path, validate_entry_name};
 
     #[test]
     fn parses_sftp_listing_and_skips_dot_entries() {
@@ -197,5 +251,6 @@ mod tests {
             "/var/log/api.log"
         );
         assert_eq!(renamed_path("./app.log", "api.log"), "./api.log");
+        assert_eq!(child_path("/", "new.log"), "/new.log");
     }
 }

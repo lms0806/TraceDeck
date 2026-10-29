@@ -5,6 +5,7 @@ mod remote;
 mod sftp;
 mod ssh_client;
 mod state;
+mod storage_security;
 mod terminal;
 
 use std::fs;

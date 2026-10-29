@@ -2,7 +2,7 @@ use std::{fs, path::Path};
 
 use tauri::State;
 
-use crate::{models::ConnectionProfile, state::AppState};
+use crate::{models::ConnectionProfile, state::AppState, storage_security::restrict_profile_file};
 
 fn read_profiles(profile_file: &Path) -> Result<Vec<ConnectionProfile>, String> {
     if !profile_file.exists() {
@@ -14,7 +14,8 @@ fn read_profiles(profile_file: &Path) -> Result<Vec<ConnectionProfile>, String> 
 
 fn write_profiles(profile_file: &Path, profiles: &[ConnectionProfile]) -> Result<(), String> {
     let content = serde_json::to_string_pretty(profiles).map_err(|error| error.to_string())?;
-    fs::write(profile_file, content).map_err(|error| error.to_string())
+    fs::write(profile_file, content).map_err(|error| error.to_string())?;
+    restrict_profile_file(profile_file)
 }
 
 fn upsert_profile(profiles: &mut Vec<ConnectionProfile>, profile: ConnectionProfile) {
@@ -27,6 +28,7 @@ fn upsert_profile(profiles: &mut Vec<ConnectionProfile>, profile: ConnectionProf
 
 #[tauri::command]
 pub(crate) fn list_profiles(state: State<'_, AppState>) -> Result<Vec<ConnectionProfile>, String> {
+    restrict_profile_file(&state.profile_file)?;
     read_profiles(&state.profile_file)
 }
 

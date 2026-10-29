@@ -35,6 +35,8 @@ pub fn run() {
             profiles::delete_profile,
             remote::check_ssh_connection,
             remote::list_remote_directory,
+            remote::delete_remote_entry,
+            remote::rename_remote_entry,
             remote::find_remote_log_files,
             remote::read_remote_file,
             remote::read_remote_log_files,

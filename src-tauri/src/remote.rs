@@ -89,6 +89,26 @@ pub(crate) fn list_remote_directory(
 }
 
 #[tauri::command]
+pub(crate) fn delete_remote_entry(
+    profile: ConnectionProfile,
+    path: String,
+    is_directory: bool,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    sftp::delete_entry(&profile, &path, is_directory, &state.known_hosts_file)
+}
+
+#[tauri::command]
+pub(crate) fn rename_remote_entry(
+    profile: ConnectionProfile,
+    path: String,
+    new_name: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    sftp::rename_entry(&profile, &path, &new_name, &state.known_hosts_file)
+}
+
+#[tauri::command]
 pub(crate) fn find_remote_log_files(
     profile: ConnectionProfile,
     path: String,

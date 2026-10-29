@@ -6,6 +6,7 @@ import {
   FolderUp,
   HardDrive,
 } from "lucide-react";
+import { useState } from "react";
 
 import type { RemoteEntry } from "./types";
 
@@ -17,6 +18,8 @@ export function FileList({
   onOpenParent,
   canOpenParent,
   onOpenFile,
+  onDeleteEntry,
+  onRenameEntry,
 }: {
   entries: RemoteEntry[];
   loaded: boolean;
@@ -25,9 +28,20 @@ export function FileList({
   onOpenParent: () => void;
   canOpenParent: boolean;
   onOpenFile: (entry: RemoteEntry) => void;
+  onDeleteEntry: (entry: RemoteEntry) => void;
+  onRenameEntry: (entry: RemoteEntry) => void;
 }) {
+  const [contextMenu, setContextMenu] = useState<{
+    entry: RemoteEntry;
+    x: number;
+    y: number;
+  } | null>(null);
+
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-[220px_1fr]">
+    <div
+      className="grid min-h-0 flex-1 grid-cols-[220px_1fr]"
+      onClick={() => setContextMenu(null)}
+    >
       <aside className="border-r border-[#293846] bg-[#151e28] p-[13px]">
         <header className="mb-2.5 flex items-center gap-[7px] text-xs text-[#a9bdcc]">
           <FolderTree size={16} /> 위치
@@ -91,6 +105,14 @@ export function FileList({
             onClick={() =>
               entry.isDir ? onOpenDirectory(entry.path) : onOpenFile(entry)
             }
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setContextMenu({
+                entry,
+                x: event.clientX,
+                y: event.clientY,
+              });
+            }}
             title={entry.details}
           >
             <span>
@@ -105,6 +127,32 @@ export function FileList({
           </button>
         ))}
       </section>
+      {contextMenu && (
+        <div
+          className="fixed z-20 min-w-[132px] rounded-md border border-[#405565] bg-[#1a2631] p-1 shadow-[0_10px_25px_#0008]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            className="w-full rounded px-2.5 py-2 text-left text-xs text-[#d6e4ed] hover:bg-[#294052]"
+            onClick={() => {
+              onRenameEntry(contextMenu.entry);
+              setContextMenu(null);
+            }}
+          >
+            이름 변경
+          </button>
+          <button
+            className="w-full rounded px-2.5 py-2 text-left text-xs text-[#ffaaa5] hover:bg-[#41272a]"
+            onClick={() => {
+              onDeleteEntry(contextMenu.entry);
+              setContextMenu(null);
+            }}
+          >
+            삭제
+          </button>
+        </div>
+      )}
     </div>
   );
 }

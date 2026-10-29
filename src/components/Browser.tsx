@@ -1,5 +1,6 @@
 import { Terminal } from "lucide-react";
 import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 
 import { FileList } from "./browser/FileList";
 import { LogDock } from "./browser/LogDock";
@@ -31,6 +32,43 @@ export function Browser({
     profile,
     active && (view === "terminal" || showTerminalDock),
   );
+
+  async function deleteEntry(entry: Parameters<typeof tail.openFile>[0]) {
+    const kind = entry.isDir ? "빈 폴더" : "파일";
+    if (
+      !window.confirm(
+        `“${entry.name}” ${kind}을 삭제할까요? 이 작업은 되돌릴 수 없습니다.`,
+      )
+    )
+      return;
+    try {
+      await invoke("delete_remote_entry", {
+        profile,
+        path: entry.path,
+        isDirectory: entry.isDir,
+      });
+      notify(`${entry.name}을(를) 삭제했습니다.`);
+      await directory.load(directory.path, false);
+    } catch (error) {
+      notify(`삭제하지 못했습니다: ${String(error)}`);
+    }
+  }
+
+  async function renameEntry(entry: Parameters<typeof tail.openFile>[0]) {
+    const newName = window.prompt("새 이름을 입력하세요.", entry.name)?.trim();
+    if (!newName || newName === entry.name) return;
+    try {
+      await invoke("rename_remote_entry", {
+        profile,
+        path: entry.path,
+        newName,
+      });
+      notify(`${entry.name}의 이름을 ${newName}(으)로 변경했습니다.`);
+      await directory.load(directory.path, false);
+    } catch (error) {
+      notify(`이름을 변경하지 못했습니다: ${String(error)}`);
+    }
+  }
 
   return (
     <section className="flex min-h-0 flex-1 flex-col">
@@ -107,6 +145,8 @@ export function Browser({
               setShowTerminalDock(false);
               void tail.openFile(entry);
             }}
+            onDeleteEntry={(entry) => void deleteEntry(entry)}
+            onRenameEntry={(entry) => void renameEntry(entry)}
           />
           {showTerminalDock ? (
             <TerminalDock

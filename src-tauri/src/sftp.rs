@@ -47,6 +47,96 @@ pub(crate) fn list_directory(
     ))
 }
 
+pub(crate) fn delete_entry(
+    profile: &ConnectionProfile,
+    path: &str,
+    is_directory: bool,
+    known_hosts_file: &Path,
+) -> Result<(), String> {
+    reject_password_auth(profile, "파일 삭제")?;
+    validate_remote_path(path)?;
+    let command = if is_directory { "rmdir" } else { "rm" };
+    run_sftp_batch(
+        profile,
+        known_hosts_file,
+        format!("{command} \"{}\"\nquit\n", escape_remote_shell_path(path)),
+        "원격 항목을 삭제하지 못했습니다.",
+    )
+}
+
+pub(crate) fn rename_entry(
+    profile: &ConnectionProfile,
+    path: &str,
+    new_name: &str,
+    known_hosts_file: &Path,
+) -> Result<(), String> {
+    reject_password_auth(profile, "이름 변경")?;
+    validate_remote_path(path)?;
+    validate_entry_name(new_name)?;
+    let destination = renamed_path(path, new_name);
+    run_sftp_batch(
+        profile,
+        known_hosts_file,
+        format!(
+            "rename \"{}\" \"{}\"\nquit\n",
+            escape_remote_shell_path(path),
+            escape_remote_shell_path(&destination)
+        ),
+        "원격 항목의 이름을 변경하지 못했습니다.",
+    )
+}
+
+fn run_sftp_batch(
+    profile: &ConnectionProfile,
+    known_hosts_file: &Path,
+    batch: String,
+    fallback_message: &str,
+) -> Result<(), String> {
+    let mut command = sftp_command(profile, known_hosts_file)?;
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command
+        .spawn()
+        .map_err(|error| format!("Windows SFTP를 실행하지 못했습니다: {error}"))?;
+    child
+        .stdin
+        .take()
+        .ok_or("SFTP 입력 스트림을 열지 못했습니다.")?
+        .write_all(batch.as_bytes())
+        .map_err(|error| error.to_string())?;
+    let output = child
+        .wait_with_output()
+        .map_err(|error| error.to_string())?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(if error.is_empty() {
+            fallback_message.into()
+        } else {
+            error
+        })
+    }
+}
+
+fn validate_entry_name(name: &str) -> Result<(), String> {
+    if name.is_empty() || matches!(name, "." | "..") || name.contains(['/', '\\', '\r', '\n', '\0'])
+    {
+        return Err("파일 이름에는 경로 구분자나 제어 문자를 사용할 수 없습니다.".into());
+    }
+    Ok(())
+}
+
+fn renamed_path(path: &str, new_name: &str) -> String {
+    match path.rsplit_once('/') {
+        Some(("", _)) => format!("/{new_name}"),
+        Some((parent, _)) => format!("{parent}/{new_name}"),
+        None => new_name.to_string(),
+    }
+}
+
 pub(crate) fn parse_listing(output: &str, requested_path: &str) -> Vec<RemoteEntry> {
     let base = if requested_path == "/" {
         "/"
@@ -82,7 +172,7 @@ pub(crate) fn parse_listing(output: &str, requested_path: &str) -> Vec<RemoteEnt
 
 #[cfg(test)]
 mod tests {
-    use super::parse_listing;
+    use super::{parse_listing, renamed_path, validate_entry_name};
 
     #[test]
     fn parses_sftp_listing_and_skips_dot_entries() {
@@ -95,5 +185,17 @@ mod tests {
         assert_eq!(entries[0].path, "/var/log/app.log");
         assert!(!entries[0].is_dir);
         assert!(entries[1].is_dir);
+    }
+
+    #[test]
+    fn validates_new_names_and_keeps_the_parent_path() {
+        assert!(validate_entry_name("renamed.log").is_ok());
+        assert!(validate_entry_name("../escape").is_err());
+        assert!(validate_entry_name(".").is_err());
+        assert_eq!(
+            renamed_path("/var/log/app.log", "api.log"),
+            "/var/log/api.log"
+        );
+        assert_eq!(renamed_path("./app.log", "api.log"), "./api.log");
     }
 }

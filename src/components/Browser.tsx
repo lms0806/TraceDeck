@@ -48,7 +48,7 @@ export function Browser({
         isDirectory: entry.isDir,
       });
       notify(`${entry.name}을(를) 삭제했습니다.`);
-      await directory.load(directory.path, false);
+      await directory.refresh();
     } catch (error) {
       notify(`삭제하지 못했습니다: ${String(error)}`);
     }
@@ -64,7 +64,7 @@ export function Browser({
         newName,
       });
       notify(`${entry.name}의 이름을 ${newName}(으)로 변경했습니다.`);
-      await directory.load(directory.path, false);
+      await directory.refresh();
     } catch (error) {
       notify(`이름을 변경하지 못했습니다: ${String(error)}`);
     }
@@ -80,7 +80,7 @@ export function Browser({
         { profile, parentPath: directory.path, name },
       );
       notify(`${name} ${label}을(를) 생성했습니다.`);
-      await directory.load(directory.path, false);
+      await directory.refresh();
     } catch (error) {
       notify(`${label}을(를) 생성하지 못했습니다: ${String(error)}`);
     }
@@ -124,7 +124,7 @@ export function Browser({
         <>
           <div className="flex items-center gap-2 border-b border-[#293846] bg-[#18232e] px-[14px] py-2.5">
             <SecondaryButton
-              onClick={() => directory.load(directory.path, false)}
+              onClick={() => void directory.refresh()}
               disabled={directory.loading}
             >
               새로고침

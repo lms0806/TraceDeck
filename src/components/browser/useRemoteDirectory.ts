@@ -19,13 +19,19 @@ export function useRemoteDirectory(
   const directoryCache = useRef(new Map<string, CachedDirectory>());
   const entriesHash = useRef("");
 
-  async function load(next: string, _saveHistory: boolean, silent = false) {
+  async function load(
+    next: string,
+    _saveHistory: boolean,
+    silent = false,
+    force = false,
+  ) {
     if (requestInProgress.current) {
       if (!silent)
-        queuedNavigation.current = () => void load(next, _saveHistory);
+        queuedNavigation.current = () =>
+          void load(next, _saveHistory, false, force);
       return;
     }
-    const cached = directoryCache.current.get(next);
+    const cached = force ? undefined : directoryCache.current.get(next);
     if (cached) {
       entriesHash.current = cached.entries
         .map((entry) => `${entry.path}|${entry.details}`)
@@ -94,6 +100,10 @@ export function useRemoteDirectory(
     void load(parentPath(path), false);
   }
 
+  function refresh() {
+    return load(path, false, false, true);
+  }
+
   return {
     path,
     setPath,
@@ -101,6 +111,7 @@ export function useRemoteDirectory(
     loaded,
     loading,
     load,
+    refresh,
     parent,
     canOpenParent: path !== "/",
   };

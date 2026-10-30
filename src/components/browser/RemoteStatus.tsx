@@ -8,8 +8,8 @@ const REFRESH_INTERVAL_MS = 2_000;
 const CPU_HISTORY_SIZE = 30;
 
 function CpuHistoryGraph({ values }: { values: number[] }) {
-  const width = 76;
-  const height = 18;
+  const width = 96;
+  const height = 24;
   const points = values
     .map((value, index) => {
       const x = (index / Math.max(values.length - 1, 1)) * width;
@@ -21,7 +21,7 @@ function CpuHistoryGraph({ values }: { values: number[] }) {
   return (
     <svg
       aria-label="최근 CPU 사용률 추이"
-      className="h-[18px] w-[76px] overflow-visible"
+      className="h-6 w-24 overflow-visible"
       viewBox={`0 0 ${width} ${height}`}
     >
       <path
@@ -37,7 +37,7 @@ function CpuHistoryGraph({ values }: { values: number[] }) {
           stroke="#78b8ff"
           strokeLinecap="round"
           strokeLinejoin="round"
-          strokeWidth="1.5"
+          strokeWidth="2"
         />
       )}
     </svg>
@@ -99,7 +99,7 @@ export function RemoteStatus({
   }, [active, profile]);
 
   return (
-    <footer className="flex h-7 shrink-0 items-center justify-start gap-3 border-t border-[#293846] bg-[#14202a] px-3 font-mono text-[10px] text-[#a7bac8]">
+    <footer className="flex h-10 shrink-0 items-center justify-start gap-4 border-t border-[#293846] bg-[#14202a] px-4 font-mono text-xs text-[#c2d2dd]">
       {unavailable && !status ? (
         <span>서버 상태를 읽을 수 없음</span>
       ) : (
@@ -108,7 +108,7 @@ export function RemoteStatus({
             className="flex items-center gap-1.5"
             title="최근 1분간 원격 서버 CPU 사용률 추이"
           >
-            <Cpu size={13} className="text-[#78b8ff]" />
+            <Cpu size={16} className="text-[#78b8ff]" />
             CPU {status ? `${status.cpuPercent.toFixed(0)}%` : "…"}
             <CpuHistoryGraph values={cpuHistory} />
           </span>
@@ -116,7 +116,7 @@ export function RemoteStatus({
             className="flex items-center gap-1"
             title="원격 서버 루트 파일시스템 사용량"
           >
-            <HardDrive size={13} className="text-[#e7bc66]" />
+            <HardDrive size={16} className="text-[#e7bc66]" />
             {status
               ? `DISK ${formatStorage(status.diskUsedKb)} / ${formatStorage(status.diskTotalKb)} (${status.diskPercent.toFixed(0)}%)`
               : "DISK …"}

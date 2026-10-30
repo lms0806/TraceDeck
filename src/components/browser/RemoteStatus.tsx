@@ -99,7 +99,7 @@ export function RemoteStatus({
   }, [active, profile]);
 
   return (
-    <footer className="flex h-7 shrink-0 items-center justify-end gap-3 border-t border-[#293846] bg-[#14202a] px-3 font-mono text-[10px] text-[#a7bac8]">
+    <footer className="flex h-7 shrink-0 items-center justify-start gap-3 border-t border-[#293846] bg-[#14202a] px-3 font-mono text-[10px] text-[#a7bac8]">
       {unavailable && !status ? (
         <span>서버 상태를 읽을 수 없음</span>
       ) : (

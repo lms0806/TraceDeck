@@ -5,6 +5,44 @@ import { useEffect, useRef, useState } from "react";
 import type { Profile, RemoteSystemStatus } from "./types";
 
 const REFRESH_INTERVAL_MS = 2_000;
+const CPU_HISTORY_SIZE = 30;
+
+function CpuHistoryGraph({ values }: { values: number[] }) {
+  const width = 76;
+  const height = 18;
+  const points = values
+    .map((value, index) => {
+      const x = (index / Math.max(values.length - 1, 1)) * width;
+      const y = height - (Math.min(Math.max(value, 0), 100) / 100) * height;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+
+  return (
+    <svg
+      aria-label="최근 CPU 사용률 추이"
+      className="h-[18px] w-[76px] overflow-visible"
+      viewBox={`0 0 ${width} ${height}`}
+    >
+      <path
+        d={`M0 ${height / 2} H${width}`}
+        stroke="#405968"
+        strokeDasharray="2 2"
+        strokeWidth="1"
+      />
+      {points && (
+        <polyline
+          fill="none"
+          points={points}
+          stroke="#78b8ff"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.5"
+        />
+      )}
+    </svg>
+  );
+}
 
 function formatStorage(kilobytes: number) {
   const units = ["KB", "MB", "GB", "TB"];
@@ -25,6 +63,7 @@ export function RemoteStatus({
   active: boolean;
 }) {
   const [status, setStatus] = useState<RemoteSystemStatus | null>(null);
+  const [cpuHistory, setCpuHistory] = useState<number[]>([]);
   const [unavailable, setUnavailable] = useState(false);
   const requestInFlight = useRef(false);
 
@@ -38,6 +77,9 @@ export function RemoteStatus({
         .then((next) => {
           if (!cancelled) {
             setStatus(next);
+            setCpuHistory((values) =>
+              [...values, next.cpuPercent].slice(-CPU_HISTORY_SIZE),
+            );
             setUnavailable(false);
           }
         })
@@ -63,11 +105,12 @@ export function RemoteStatus({
       ) : (
         <>
           <span
-            className="flex items-center gap-1"
-            title="원격 서버 CPU 사용률"
+            className="flex items-center gap-1.5"
+            title="최근 1분간 원격 서버 CPU 사용률 추이"
           >
             <Cpu size={13} className="text-[#78b8ff]" />
             CPU {status ? `${status.cpuPercent.toFixed(0)}%` : "…"}
+            <CpuHistoryGraph values={cpuHistory} />
           </span>
           <span
             className="flex items-center gap-1"

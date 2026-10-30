@@ -27,6 +27,7 @@ export default tseslint.config(
       // This desktop app's entry file renders directly instead of exporting a
       // component module, so this Fast Refresh heuristic does not apply.
       "react-refresh/only-export-components": "off",
+      "@typescript-eslint/switch-exhaustiveness-check": "error",
     },
   },
 );

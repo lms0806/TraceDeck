@@ -25,3 +25,10 @@ export type RemoteFile = {
 export type TailChunk = { streamId: number; chunk: string };
 
 export type TerminalChunk = { terminalId: number; chunk: string };
+
+export type RemoteSystemStatus = {
+  cpuPercent: number;
+  diskUsedKb: number;
+  diskTotalKb: number;
+  diskPercent: number;
+};

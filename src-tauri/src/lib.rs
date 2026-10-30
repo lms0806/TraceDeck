@@ -6,6 +6,7 @@ mod sftp;
 mod ssh_client;
 mod state;
 mod storage_security;
+mod system;
 mod terminal;
 
 use std::fs;
@@ -39,6 +40,7 @@ pub fn run() {
             remote::rename_remote_entry,
             remote::create_remote_directory,
             remote::create_remote_file,
+            remote::get_remote_system_status,
             remote::find_remote_log_files,
             remote::read_remote_file,
             remote::read_remote_log_files,

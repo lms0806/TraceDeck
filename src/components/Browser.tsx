@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { FileList } from "./browser/FileList";
 import { LogDock } from "./browser/LogDock";
+import { RemoteStatus } from "./browser/RemoteStatus";
 import { TerminalDock } from "./browser/TerminalDock";
 import type { Profile } from "./browser/types";
 import { useRemoteDirectory } from "./browser/useRemoteDirectory";
@@ -189,6 +190,7 @@ export function Browser({
           ) : null}
         </>
       )}
+      <RemoteStatus profile={profile} active={active} />
     </section>
   );
 }

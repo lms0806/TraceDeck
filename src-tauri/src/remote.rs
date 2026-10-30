@@ -2,10 +2,13 @@ use tauri::State;
 
 use crate::{
     logs,
-    models::{ConnectionCheck, ConnectionProfile, LogSource, RemoteEntry, RemoteFile},
+    models::{
+        ConnectionCheck, ConnectionProfile, LogSource, RemoteEntry, RemoteFile, RemoteSystemStatus,
+    },
     sftp,
     ssh_client::{reject_password_auth, ssh_command},
     state::{AppState, TailStreams, TerminalSessions},
+    system,
 };
 
 #[tauri::command]
@@ -126,6 +129,14 @@ pub(crate) fn create_remote_file(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     sftp::create_empty_file(&profile, &parent_path, &name, &state.known_hosts_file)
+}
+
+#[tauri::command]
+pub(crate) fn get_remote_system_status(
+    profile: ConnectionProfile,
+    state: State<'_, AppState>,
+) -> Result<RemoteSystemStatus, String> {
+    system::read_remote_system_status(&profile, &state.known_hosts_file)
 }
 
 #[tauri::command]

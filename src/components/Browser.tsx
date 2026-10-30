@@ -210,18 +210,19 @@ export function Browser({
             <TerminalDock
               terminal={terminal}
               onClose={() => setShowTerminalDock(false)}
-              logPath={tail.preview?.path}
+              logPath={tail.activeLog?.path}
               height={dockHeight}
               onHeightChange={setDockHeight}
               onShowLog={
-                tail.preview ? () => setShowTerminalDock(false) : undefined
+                tail.activeLog ? () => setShowTerminalDock(false) : undefined
               }
             />
-          ) : tail.preview ? (
+          ) : tail.activeLog ? (
             <LogDock
-              preview={tail.preview}
-              streamId={tail.streamId}
-              onClose={tail.close}
+              logs={tail.logs}
+              activeLogId={tail.activeLog.id}
+              onCloseLog={tail.closeLog}
+              onSelectLog={tail.setActiveLogId}
               onOpenTerminal={() => setShowTerminalDock(true)}
               height={dockHeight}
               onHeightChange={setDockHeight}

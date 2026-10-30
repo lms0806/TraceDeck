@@ -2,9 +2,7 @@ import type { CSSProperties } from "react";
 import { useLayoutEffect, useRef, type PointerEvent } from "react";
 import { File, X } from "lucide-react";
 
-import { IconButton } from "../ui/IconButton";
-
-import type { RemoteFile } from "./types";
+import type { LogTab } from "./useTailStream";
 
 const ansiPalette: Record<number, string> = {
   30: "#4c5967",
@@ -71,20 +69,23 @@ function AnsiLogContent({ content }: { content: string }) {
 }
 
 export function LogDock({
-  preview,
-  streamId,
-  onClose,
+  logs,
+  activeLogId,
+  onCloseLog,
+  onSelectLog,
   onOpenTerminal,
   height,
   onHeightChange,
 }: {
-  preview: RemoteFile;
-  streamId: number | null;
-  onClose: () => void;
+  logs: LogTab[];
+  activeLogId: string;
+  onCloseLog: (id: string) => void;
+  onSelectLog: (id: string) => void;
   onOpenTerminal: () => void;
   height: number;
   onHeightChange: (height: number) => void;
 }) {
+  const preview = logs.find((log) => log.id === activeLogId);
   const previewScroll = useRef<HTMLPreElement>(null);
   const stickToBottom = useRef(true);
   const scrollFrame = useRef<number | null>(null);
@@ -102,7 +103,7 @@ export function LogDock({
       if (scrollFrame.current !== null)
         cancelAnimationFrame(scrollFrame.current);
     };
-  }, [preview.content]);
+  }, [preview?.content]);
 
   function beginResize(event: PointerEvent<HTMLDivElement>) {
     event.preventDefault();
@@ -126,6 +127,8 @@ export function LogDock({
     window.addEventListener("pointerup", stop);
   }
 
+  if (!preview) return null;
+
   return (
     <section
       className="file-preview-dock flex min-h-[150px] max-h-[75vh] flex-none flex-col overflow-hidden border-t-[3px] border-[#3a5264] bg-[#0d141b]"
@@ -134,15 +137,34 @@ export function LogDock({
       <div className="dock-resize-handle" onPointerDown={beginResize} />
       <header className="flex h-[38px] items-center justify-between border-b border-[#293d4d] px-3 text-xs text-[#ccdce7]">
         <div className="flex min-w-0 items-center gap-1">
-          <button className="flex min-w-0 items-center gap-[7px] rounded bg-[#263b4b] px-2 py-1 text-[#f1f7fb]">
-            <File size={15} />
-            <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-              {preview.path}
-            </span>
-            <small className="whitespace-nowrap rounded-sm bg-[#153d32] px-[5px] py-0.5 text-[10px] text-[#74d6ac]">
-              {streamId === null ? "준비 중" : "tail -F 추적 중"}
-            </small>
-          </button>
+          {logs.map((log) => (
+            <button
+              className={`flex min-w-0 items-center gap-[7px] rounded px-2 py-1 ${
+                log.id === activeLogId
+                  ? "bg-[#263b4b] text-[#f1f7fb]"
+                  : "text-[#9fb2c2] hover:bg-[#263746] hover:text-white"
+              }`}
+              key={log.id}
+              onClick={() => onSelectLog(log.id)}
+            >
+              <File size={15} />
+              <span className="max-w-[220px] overflow-hidden text-ellipsis whitespace-nowrap">
+                {log.path}
+              </span>
+              <small className="whitespace-nowrap rounded-sm bg-[#153d32] px-[5px] py-0.5 text-[10px] text-[#74d6ac]">
+                {log.streamId === null ? "준비 중" : "tail -F 추적 중"}
+              </small>
+              <X
+                aria-label={`${log.path} 닫기`}
+                className="shrink-0"
+                size={14}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCloseLog(log.id);
+                }}
+              />
+            </button>
+          ))}
           <button
             className="rounded px-2 py-1 text-[#9fb2c2] hover:bg-[#263746] hover:text-white"
             onClick={onOpenTerminal}
@@ -150,11 +172,7 @@ export function LogDock({
             터미널
           </button>
         </div>
-        <div className="flex items-center gap-1">
-          <IconButton onClick={onClose}>
-            <X size={18} />
-          </IconButton>
-        </div>
+        <div className="flex items-center gap-1" />
       </header>
       <pre
         className="m-0 min-h-0 flex-1 overflow-auto p-[12px_16px] font-mono text-xs leading-[1.55] whitespace-pre-wrap text-[#d0e0ec]"

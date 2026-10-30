@@ -1,10 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Cpu, HardDrive } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { Profile, RemoteSystemStatus } from "./types";
 
-const REFRESH_INTERVAL_MS = 5_000;
+const REFRESH_INTERVAL_MS = 2_000;
 
 function formatStorage(kilobytes: number) {
   const units = ["KB", "MB", "GB", "TB"];
@@ -26,11 +26,14 @@ export function RemoteStatus({
 }) {
   const [status, setStatus] = useState<RemoteSystemStatus | null>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const requestInFlight = useRef(false);
 
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
     const refresh = () => {
+      if (requestInFlight.current) return;
+      requestInFlight.current = true;
       void invoke<RemoteSystemStatus>("get_remote_system_status", { profile })
         .then((next) => {
           if (!cancelled) {
@@ -40,6 +43,9 @@ export function RemoteStatus({
         })
         .catch(() => {
           if (!cancelled) setUnavailable(true);
+        })
+        .finally(() => {
+          requestInFlight.current = false;
         });
     };
     refresh();

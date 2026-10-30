@@ -28,6 +28,10 @@ export default tseslint.config(
       // component module, so this Fast Refresh heuristic does not apply.
       "react-refresh/only-export-components": "off",
       "@typescript-eslint/switch-exhaustiveness-check": "error",
+      "@typescript-eslint/consistent-type-imports": [
+        "error",
+        { prefer: "type-imports", fixStyle: "separate-type-imports" },
+      ],
     },
   },
 );

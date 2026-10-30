@@ -1,4 +1,5 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import type { FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";

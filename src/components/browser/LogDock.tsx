@@ -1,9 +1,5 @@
-import {
-  CSSProperties,
-  useLayoutEffect,
-  useRef,
-  type PointerEvent,
-} from "react";
+import type { CSSProperties } from "react";
+import { useLayoutEffect, useRef, type PointerEvent } from "react";
 import { File, X } from "lucide-react";
 
 import { IconButton } from "../ui/IconButton";

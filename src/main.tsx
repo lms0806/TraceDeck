@@ -198,7 +198,7 @@ function App() {
           </div>
         )}
       </section>
-      <div className="absolute bottom-[15px] right-[18px] z-[5] max-w-[470px] rounded-md border border-[#3b5164] bg-[#1d2a36] px-[13px] py-2.5 text-xs text-[#bdcdda] shadow-[0_8px_22px_#0007]">
+      <div className="absolute right-[18px] top-[67px] z-[5] max-w-[470px] rounded-md border border-[#3b5164] bg-[#1d2a36] px-[13px] py-2.5 text-xs text-[#bdcdda] shadow-[0_8px_22px_#0007]">
         {notice}
       </div>
       {dialog && (

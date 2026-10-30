@@ -19,3 +19,23 @@ portable-pty = "0.9"
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-store = "2"
+
+[lints.rust]
+trivial_casts = "warn"              # 불필요한 형변환 인식
+trivial_numeric_casts = "warn"      # 불필요한 숫자 타입 인식
+unused_extern_crates = "warn"       # 사용하지 않는 크레이트 선언 인식
+unused_import_braces = "warn"       # 불필요한 중괄호 인식
+unused_qualifications = "warn"      # 불필요한 전체 경로 인식
+dead_code = "warn"                  # 사용하지 않는 함수/struct/enum 탐지
+unused_variables = "warn"           # 사용하지 않는 변수 탐지
+unused_mut = "warn"                 # 불필요한 mut 탐지
+unused_assignments = "warn"         # 불필요한 값 주입 탐지
+unused_parens = "warn"              # 불필요한 괄호 탐지
+unused_macros = "warn"              # 사용 안하는 macro 탐지
+unused_must_use = "warn"            # 불필요한 Result, Option 등의 반환값 무시 탐지
+
+[lints.clippy]
+multiple_crate_versions = "allow"
+dbg_macro = "warn"                  # 디버그용 dbg! 잔존 방지
+todo = "warn"                       # 미완성 todo! 잔존 방지
+unimplemented = "warn"              # unimplemented! 잔존 방지

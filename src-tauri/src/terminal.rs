@@ -25,7 +25,7 @@ pub(crate) fn start_terminal(
     let profile = profile.clone();
     let known_hosts_file = known_hosts_file.to_path_buf();
     let app_for_thread = app.clone();
-    std::thread::spawn(move || {
+    thread::spawn(move || {
         let sessions = app_for_thread.state::<TerminalSessions>();
         if let Err(error) = start_terminal_process(
             &profile,

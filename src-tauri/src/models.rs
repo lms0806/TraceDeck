@@ -64,11 +64,18 @@ pub(crate) struct TerminalChunk {
     pub(crate) chunk: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RemoteSystemStatus {
     pub(crate) cpu_percent: f64,
     pub(crate) disk_used_kb: u64,
     pub(crate) disk_total_kb: u64,
     pub(crate) disk_percent: f64,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SystemStatusChunk {
+    pub(crate) stream_id: u64,
+    pub(crate) status: RemoteSystemStatus,
 }

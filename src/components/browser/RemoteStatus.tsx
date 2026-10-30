@@ -1,10 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { Cpu, HardDrive } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import type { Profile, RemoteSystemStatus } from "./types";
+import type { Profile, RemoteSystemStatus, SystemStatusChunk } from "./types";
 
-const REFRESH_INTERVAL_MS = 2_000;
 const CPU_HISTORY_SIZE = 30;
 
 function CpuHistoryGraph({ values }: { values: number[] }) {
@@ -65,36 +65,60 @@ export function RemoteStatus({
   const [status, setStatus] = useState<RemoteSystemStatus | null>(null);
   const [cpuHistory, setCpuHistory] = useState<number[]>([]);
   const [unavailable, setUnavailable] = useState(false);
-  const requestInFlight = useRef(false);
+  const streamIdRef = useRef<number | null>(null);
+  const bufferedStatus = useRef(new Map<number, RemoteSystemStatus>());
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<SystemStatusChunk>("system-status-chunk", (event) => {
+      const { streamId, status: next } = event.payload;
+      if (streamId !== streamIdRef.current) {
+        bufferedStatus.current.set(streamId, next);
+        return;
+      }
+      setStatus(next);
+      setCpuHistory((values) =>
+        [...values, next.cpuPercent].slice(-CPU_HISTORY_SIZE),
+      );
+      setUnavailable(false);
+    }).then((stop) => {
+      unlisten = stop;
+    });
+    return () => unlisten?.();
+  }, []);
 
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
-    const refresh = () => {
-      if (requestInFlight.current) return;
-      requestInFlight.current = true;
-      void invoke<RemoteSystemStatus>("get_remote_system_status", { profile })
-        .then((next) => {
-          if (!cancelled) {
-            setStatus(next);
-            setCpuHistory((values) =>
-              [...values, next.cpuPercent].slice(-CPU_HISTORY_SIZE),
-            );
-            setUnavailable(false);
-          }
-        })
-        .catch(() => {
-          if (!cancelled) setUnavailable(true);
-        })
-        .finally(() => {
-          requestInFlight.current = false;
-        });
-    };
-    refresh();
-    const intervalId = window.setInterval(refresh, REFRESH_INTERVAL_MS);
+    void invoke<number>("start_remote_system_status_stream", { profile })
+      .then((streamId) => {
+        if (cancelled) {
+          void invoke("stop_remote_system_status_stream", { streamId });
+          return;
+        }
+        streamIdRef.current = streamId;
+        setStatus(null);
+        setCpuHistory([]);
+        setUnavailable(false);
+        const buffered = bufferedStatus.current.get(streamId);
+        if (buffered) {
+          bufferedStatus.current.delete(streamId);
+          setStatus(buffered);
+          setCpuHistory([buffered.cpuPercent]);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setStatus(null);
+          setUnavailable(true);
+        }
+      });
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
+      const streamId = streamIdRef.current;
+      streamIdRef.current = null;
+      if (streamId !== null)
+        void invoke("stop_remote_system_status_stream", { streamId });
     };
   }, [active, profile]);
 

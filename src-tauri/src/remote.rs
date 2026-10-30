@@ -2,12 +2,10 @@ use tauri::State;
 
 use crate::{
     logs,
-    models::{
-        ConnectionCheck, ConnectionProfile, LogSource, RemoteEntry, RemoteFile, RemoteSystemStatus,
-    },
+    models::{ConnectionCheck, ConnectionProfile, LogSource, RemoteEntry, RemoteFile},
     sftp,
     ssh_client::{reject_password_auth, ssh_command},
-    state::{AppState, TailStreams, TerminalSessions},
+    state::{AppState, SystemStreams, TailStreams, TerminalSessions},
     system,
 };
 
@@ -132,11 +130,21 @@ pub(crate) fn create_remote_file(
 }
 
 #[tauri::command]
-pub(crate) fn get_remote_system_status(
+pub(crate) fn start_remote_system_status_stream(
     profile: ConnectionProfile,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
-) -> Result<RemoteSystemStatus, String> {
-    system::read_remote_system_status(&profile, &state.known_hosts_file)
+    streams: State<'_, SystemStreams>,
+) -> Result<u64, String> {
+    system::start_remote_system_stream(&profile, &state.known_hosts_file, app, &streams)
+}
+
+#[tauri::command]
+pub(crate) fn stop_remote_system_status_stream(
+    stream_id: u64,
+    streams: State<'_, SystemStreams>,
+) -> Result<(), String> {
+    system::stop_remote_system_stream(stream_id, &streams)
 }
 
 #[tauri::command]

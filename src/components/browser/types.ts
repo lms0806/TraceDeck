@@ -38,3 +38,8 @@ export interface RemoteSystemStatus {
   diskTotalKb: number;
   diskPercent: number;
 }
+
+export interface SystemStatusChunk {
+  streamId: number;
+  status: RemoteSystemStatus;
+}

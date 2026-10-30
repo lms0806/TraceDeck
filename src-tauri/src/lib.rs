@@ -13,7 +13,7 @@ use std::fs;
 
 use tauri::Manager;
 
-use state::{AppState, TailStreams, TerminalSessions};
+use state::{AppState, SystemStreams, TailStreams, TerminalSessions};
 
 pub fn run() {
     tauri::Builder::default()
@@ -27,6 +27,7 @@ pub fn run() {
                 known_hosts_file: data_dir.join("known_hosts"),
             });
             app.manage(TailStreams::new());
+            app.manage(SystemStreams::new());
             app.manage(TerminalSessions::new());
             Ok(())
         })
@@ -40,7 +41,8 @@ pub fn run() {
             remote::rename_remote_entry,
             remote::create_remote_directory,
             remote::create_remote_file,
-            remote::get_remote_system_status,
+            remote::start_remote_system_status_stream,
+            remote::stop_remote_system_status_stream,
             remote::find_remote_log_files,
             remote::read_remote_file,
             remote::read_remote_log_files,

@@ -1,46 +1,83 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Cpu, HardDrive } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type MouseEvent, useEffect, useRef, useState } from "react";
 
 import type { Profile, RemoteSystemStatus, SystemStatusChunk } from "./types";
 
 const CPU_HISTORY_SIZE = 30;
 
-function CpuHistoryGraph({ values }: { values: number[] }) {
+interface CpuSample {
+  recordedAt: number;
+  value: number;
+}
+
+function formatRecordedAt(recordedAt: number) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(recordedAt);
+}
+
+function CpuHistoryGraph({ samples }: { samples: CpuSample[] }) {
   const width = 96;
   const height = 24;
-  const points = values
-    .map((value, index) => {
-      const x = (index / Math.max(values.length - 1, 1)) * width;
-      const y = height - (Math.min(Math.max(value, 0), 100) / 100) * height;
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const hoveredSample =
+    hoveredIndex === null ? undefined : samples[hoveredIndex];
+  const points = samples
+    .map((sample, index) => {
+      const x = (index / Math.max(samples.length - 1, 1)) * width;
+      const y =
+        height - (Math.min(Math.max(sample.value, 0), 100) / 100) * height;
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(" ");
 
+  const selectHoveredSample = (event: MouseEvent<SVGSVGElement>) => {
+    if (samples.length === 0) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const ratio = Math.min(
+      1,
+      Math.max(0, (event.clientX - bounds.left) / bounds.width),
+    );
+    setHoveredIndex(Math.round(ratio * (samples.length - 1)));
+  };
+
   return (
-    <svg
-      aria-label="최근 CPU 사용률 추이"
-      className="h-6 w-24 overflow-visible"
-      viewBox={`0 0 ${width} ${height}`}
-    >
-      <path
-        d={`M0 ${height / 2} H${width}`}
-        stroke="#405968"
-        strokeDasharray="2 2"
-        strokeWidth="1"
-      />
-      {points && (
-        <polyline
-          fill="none"
-          points={points}
-          stroke="#78b8ff"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="2"
-        />
+    <span className="relative inline-flex">
+      {hoveredSample && (
+        <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded bg-[#081116] px-2 py-1 text-[11px] text-white shadow-lg">
+          {formatRecordedAt(hoveredSample.recordedAt)} · CPU{" "}
+          {hoveredSample.value.toFixed(1)}%
+        </span>
       )}
-    </svg>
+      <svg
+        aria-label="최근 CPU 사용률 추이. 마우스를 올리면 시점별 사용률을 볼 수 있습니다."
+        className="h-6 w-24 overflow-visible"
+        onMouseLeave={() => setHoveredIndex(null)}
+        onMouseMove={selectHoveredSample}
+        viewBox={`0 0 ${width} ${height}`}
+      >
+        <path
+          d={`M0 ${height / 2} H${width}`}
+          stroke="#405968"
+          strokeDasharray="2 2"
+          strokeWidth="1"
+        />
+        {points && (
+          <polyline
+            fill="none"
+            points={points}
+            stroke="#78b8ff"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+          />
+        )}
+      </svg>
+    </span>
   );
 }
 
@@ -63,7 +100,7 @@ export function RemoteStatus({
   active: boolean;
 }) {
   const [status, setStatus] = useState<RemoteSystemStatus | null>(null);
-  const [cpuHistory, setCpuHistory] = useState<number[]>([]);
+  const [cpuHistory, setCpuHistory] = useState<CpuSample[]>([]);
   const [unavailable, setUnavailable] = useState(false);
   const streamIdRef = useRef<number | null>(null);
   const bufferedStatus = useRef(new Map<number, RemoteSystemStatus>());
@@ -78,7 +115,9 @@ export function RemoteStatus({
       }
       setStatus(next);
       setCpuHistory((values) =>
-        [...values, next.cpuPercent].slice(-CPU_HISTORY_SIZE),
+        [...values, { value: next.cpuPercent, recordedAt: Date.now() }].slice(
+          -CPU_HISTORY_SIZE,
+        ),
       );
       setUnavailable(false);
     }).then((stop) => {
@@ -104,7 +143,9 @@ export function RemoteStatus({
         if (buffered) {
           bufferedStatus.current.delete(streamId);
           setStatus(buffered);
-          setCpuHistory([buffered.cpuPercent]);
+          setCpuHistory([
+            { value: buffered.cpuPercent, recordedAt: Date.now() },
+          ]);
         }
       })
       .catch(() => {
@@ -134,7 +175,7 @@ export function RemoteStatus({
           >
             <Cpu size={16} className="text-[#78b8ff]" />
             CPU {status ? `${status.cpuPercent.toFixed(0)}%` : "…"}
-            <CpuHistoryGraph values={cpuHistory} />
+            <CpuHistoryGraph samples={cpuHistory} />
           </span>
           <span
             className="flex items-center gap-1"

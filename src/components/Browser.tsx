@@ -36,6 +36,7 @@ export function Browser({
     workspace?.showTerminalDock ?? false,
   );
   const [dockHeight, setDockHeight] = useState(workspace?.dockHeight ?? 310);
+  const [splitLogIds, setSplitLogIds] = useState<[string, string] | null>(null);
   const directory = useRemoteDirectory(
     profile,
     active,
@@ -44,6 +45,13 @@ export function Browser({
   );
   const restoredDirectory = useRef(false);
   const tail = useTailStream(profile);
+  const splitLogs = splitLogIds
+    ?.map((id) => tail.logs.find((log) => log.id === id))
+    .filter((log): log is (typeof tail.logs)[number] => log !== undefined);
+  const hasLogSplit = splitLogs?.length === 2;
+  const logTabLabel = hasLogSplit
+    ? splitLogs.map((log) => log.path.split("/").pop() ?? log.path).join(" + ")
+    : undefined;
   const terminal = useTerminal(
     profile,
     active && (view === "terminal" || showTerminalDock),
@@ -211,6 +219,8 @@ export function Browser({
               terminal={terminal}
               onClose={() => setShowTerminalDock(false)}
               logPath={tail.activeLog?.path}
+              logTabLabel={logTabLabel}
+              isLogSplit={hasLogSplit}
               height={dockHeight}
               onHeightChange={setDockHeight}
               onShowLog={
@@ -221,8 +231,10 @@ export function Browser({
             <LogDock
               logs={tail.logs}
               activeLogId={tail.activeLog.id}
+              splitLogIds={splitLogIds}
               onCloseLog={tail.closeLog}
               onSelectLog={tail.setActiveLogId}
+              onSplitLogIdsChange={setSplitLogIds}
               onOpenTerminal={() => setShowTerminalDock(true)}
               height={dockHeight}
               onHeightChange={setDockHeight}

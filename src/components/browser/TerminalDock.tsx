@@ -1,7 +1,7 @@
 import { useEffect, useRef, type PointerEvent } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as Xterm } from "@xterm/xterm";
-import { File, Terminal, Trash2, X } from "lucide-react";
+import { Columns2, File, Terminal, Trash2, X } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 
 import { IconButton } from "../ui/IconButton";
@@ -19,6 +19,8 @@ export function TerminalDock({
   terminal,
   onClose,
   logPath,
+  logTabLabel,
+  isLogSplit = false,
   onShowLog,
   height,
   onHeightChange,
@@ -27,6 +29,8 @@ export function TerminalDock({
   terminal: TerminalState;
   onClose: () => void;
   logPath?: string;
+  logTabLabel?: string;
+  isLogSplit?: boolean;
   onShowLog?: () => void;
   height?: number;
   onHeightChange?: (height: number) => void;
@@ -157,10 +161,15 @@ export function TerminalDock({
               className="flex min-w-0 items-center gap-1 rounded px-2 py-1 text-[#9fb2c2] hover:bg-[#263746] hover:text-white"
               onClick={onShowLog}
             >
-              <File size={15} />
+              {isLogSplit ? <Columns2 size={15} /> : <File size={15} />}
               <span className="max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap">
-                {logPath}
+                {logTabLabel ?? logPath}
               </span>
+              {isLogSplit && (
+                <small className="rounded-sm bg-[#174b3b] px-[5px] py-0.5 text-[10px] text-[#a6ffce]">
+                  분할
+                </small>
+              )}
             </button>
           )}
           <span className="flex items-center gap-[7px] rounded bg-[#263b4b] px-2 py-1 text-[#f1f7fb]">

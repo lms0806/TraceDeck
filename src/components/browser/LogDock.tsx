@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
-import { useLayoutEffect, useRef, type PointerEvent } from "react";
-import { File, X } from "lucide-react";
+import { useLayoutEffect, useRef, useState, type PointerEvent } from "react";
+import { Columns2, File, X } from "lucide-react";
 
 import type { LogTab } from "./useTailStream";
 
@@ -68,42 +68,69 @@ function AnsiLogContent({ content }: { content: string }) {
   );
 }
 
+function LogPreview({ log }: { log: LogTab }) {
+  const previewScroll = useRef<HTMLPreElement>(null);
+  const stickToBottom = useRef(true);
+
+  useLayoutEffect(() => {
+    if (!stickToBottom.current) return;
+    const frame = requestAnimationFrame(() => {
+      const element = previewScroll.current;
+      if (element && stickToBottom.current)
+        element.scrollTop = element.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [log.content]);
+
+  return (
+    <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="shrink-0 border-b border-[#293d4d] px-3 py-1.5 font-mono text-[10px] text-[#89a1b2]">
+        {log.path}
+      </div>
+      <pre
+        className="m-0 min-h-0 flex-1 overflow-auto p-[12px_16px] font-mono text-xs leading-[1.55] whitespace-pre-wrap text-[#d0e0ec]"
+        ref={previewScroll}
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          stickToBottom.current =
+            element.scrollHeight - element.scrollTop - element.clientHeight <
+            24;
+        }}
+      >
+        <AnsiLogContent content={log.content} />
+      </pre>
+    </section>
+  );
+}
+
 export function LogDock({
   logs,
   activeLogId,
+  splitLogIds,
   onCloseLog,
   onSelectLog,
+  onSplitLogIdsChange,
   onOpenTerminal,
   height,
   onHeightChange,
 }: {
   logs: LogTab[];
   activeLogId: string;
+  splitLogIds: [string, string] | null;
   onCloseLog: (id: string) => void;
   onSelectLog: (id: string) => void;
+  onSplitLogIdsChange: (ids: [string, string] | null) => void;
   onOpenTerminal: () => void;
   height: number;
   onHeightChange: (height: number) => void;
 }) {
   const preview = logs.find((log) => log.id === activeLogId);
-  const previewScroll = useRef<HTMLPreElement>(null);
-  const stickToBottom = useRef(true);
-  const scrollFrame = useRef<number | null>(null);
-
-  useLayoutEffect(() => {
-    if (!stickToBottom.current) return;
-    if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current);
-    scrollFrame.current = requestAnimationFrame(() => {
-      const element = previewScroll.current;
-      if (element && stickToBottom.current)
-        element.scrollTop = element.scrollHeight;
-      scrollFrame.current = null;
-    });
-    return () => {
-      if (scrollFrame.current !== null)
-        cancelAnimationFrame(scrollFrame.current);
-    };
-  }, [preview?.content]);
+  const [dropSide, setDropSide] = useState<"left" | "right" | null>(null);
+  const dockRef = useRef<HTMLElement>(null);
+  const draggedLogId = useRef<string | null>(null);
+  const hasMoved = useRef(false);
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
+  const suppressClick = useRef(false);
 
   function beginResize(event: PointerEvent<HTMLDivElement>) {
     event.preventDefault();
@@ -127,44 +154,153 @@ export function LogDock({
     window.addEventListener("pointerup", stop);
   }
 
+  function getDropSide(clientX: number, clientY: number) {
+    const bounds = dockRef.current?.getBoundingClientRect();
+    if (
+      !bounds ||
+      clientX < bounds.left ||
+      clientX > bounds.right ||
+      clientY < bounds.top ||
+      clientY > bounds.bottom
+    )
+      return null;
+    return clientX < bounds.left + bounds.width / 2 ? "left" : "right";
+  }
+
+  function beginTabDrag(event: PointerEvent<HTMLButtonElement>, id: string) {
+    if (event.button !== 0) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    draggedLogId.current = id;
+    hasMoved.current = false;
+    pointerStart.current = { x: event.clientX, y: event.clientY };
+  }
+
+  function moveTabDrag(event: PointerEvent<HTMLButtonElement>) {
+    const start = pointerStart.current;
+    if (start === null || draggedLogId.current === null) return;
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) < 6)
+      return;
+    hasMoved.current = true;
+    setDropSide(getDropSide(event.clientX, event.clientY));
+  }
+
+  function endTabDrag(event: PointerEvent<HTMLButtonElement>) {
+    const draggedId = draggedLogId.current;
+    const side = getDropSide(event.clientX, event.clientY);
+    const dragged = hasMoved.current;
+    draggedLogId.current = null;
+    hasMoved.current = false;
+    pointerStart.current = null;
+    setDropSide(null);
+    if (
+      !preview ||
+      draggedId === null ||
+      side === null ||
+      !dragged ||
+      draggedId === preview.id
+    )
+      return;
+    suppressClick.current = true;
+    onSplitLogIdsChange(
+      side === "left" ? [draggedId, preview.id] : [preview.id, draggedId],
+    );
+  }
+
+  const splitLogs = splitLogIds
+    ?.map((id) => logs.find((log) => log.id === id))
+    .filter((log): log is LogTab => log !== undefined);
+  const splitTabLabel = splitLogs
+    ?.map((log) => log.path.split("/").pop() ?? log.path)
+    .join(" + ");
+
   if (!preview) return null;
 
   return (
     <section
-      className="file-preview-dock flex min-h-[150px] max-h-[75vh] flex-none flex-col overflow-hidden border-t-[3px] border-[#3a5264] bg-[#0d141b]"
+      className={`file-preview-dock relative flex min-h-[150px] max-h-[75vh] flex-none flex-col overflow-hidden border-t-[3px] border-[#3a5264] bg-[#0d141b] ${
+        dropSide ? "ring-2 ring-inset ring-[#50d3a1]" : ""
+      }`}
+      ref={dockRef}
       style={{ height }}
     >
       <div className="dock-resize-handle" onPointerDown={beginResize} />
       <header className="flex h-[38px] items-center justify-between border-b border-[#293d4d] px-3 text-xs text-[#ccdce7]">
         <div className="flex min-w-0 items-center gap-1">
-          {logs.map((log) => (
-            <button
-              className={`flex min-w-0 items-center gap-[7px] rounded px-2 py-1 ${
-                log.id === activeLogId
-                  ? "bg-[#263b4b] text-[#f1f7fb]"
-                  : "text-[#9fb2c2] hover:bg-[#263746] hover:text-white"
-              }`}
-              key={log.id}
-              onClick={() => onSelectLog(log.id)}
-            >
-              <File size={15} />
-              <span className="max-w-[220px] overflow-hidden text-ellipsis whitespace-nowrap">
-                {log.path}
-              </span>
-              <small className="whitespace-nowrap rounded-sm bg-[#153d32] px-[5px] py-0.5 text-[10px] text-[#74d6ac]">
-                {log.streamId === null ? "준비 중" : "tail -F 추적 중"}
-              </small>
-              <X
-                aria-label={`${log.path} 닫기`}
-                className="shrink-0"
-                size={14}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onCloseLog(log.id);
+          {logs.map((log) => {
+            const isSplitLog = splitLogIds?.includes(log.id) ?? false;
+            if (isSplitLog) {
+              if (log.id !== splitLogIds?.[0]) return null;
+              return (
+                <button
+                  aria-label={`${splitTabLabel ?? "로그"} 분할 보기`}
+                  className="flex min-w-0 items-center gap-[7px] rounded bg-[#263b4b] px-2 py-1 text-[#f1f7fb] ring-1 ring-inset ring-[#50d3a1]"
+                  key="split-log-tab"
+                  title="분할 보기"
+                >
+                  <Columns2 size={15} />
+                  <span className="max-w-[280px] overflow-hidden text-ellipsis whitespace-nowrap">
+                    {splitTabLabel ?? "분할 보기"}
+                  </span>
+                  <small className="flex items-center gap-0.5 whitespace-nowrap rounded-sm bg-[#174b3b] px-[5px] py-0.5 text-[10px] text-[#a6ffce]">
+                    분할
+                  </small>
+                  <X
+                    aria-label="분할 보기 닫기"
+                    className="shrink-0"
+                    size={14}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSplitLogIdsChange(null);
+                    }}
+                  />
+                </button>
+              );
+            }
+            return (
+              <button
+                aria-label={log.path}
+                className={`flex min-w-0 items-center gap-[7px] rounded px-2 py-1 ${
+                  log.id === activeLogId
+                    ? "bg-[#263b4b] text-[#f1f7fb]"
+                    : "text-[#9fb2c2] hover:bg-[#263746] hover:text-white"
+                }`}
+                key={log.id}
+                onClick={() => {
+                  if (suppressClick.current) {
+                    suppressClick.current = false;
+                    return;
+                  }
+                  onSelectLog(log.id);
                 }}
-              />
-            </button>
-          ))}
+                onPointerDown={(event) => beginTabDrag(event, log.id)}
+                onPointerMove={moveTabDrag}
+                onPointerUp={endTabDrag}
+                onPointerCancel={() => {
+                  draggedLogId.current = null;
+                  hasMoved.current = false;
+                  pointerStart.current = null;
+                  setDropSide(null);
+                }}
+              >
+                <File size={15} />
+                <span className="max-w-[220px] overflow-hidden text-ellipsis whitespace-nowrap">
+                  {log.path}
+                </span>
+                <small className="whitespace-nowrap rounded-sm bg-[#153d32] px-[5px] py-0.5 text-[10px] text-[#74d6ac]">
+                  {log.streamId === null ? "준비 중" : "tail -F 추적 중"}
+                </small>
+                <X
+                  aria-label={`${log.path} 닫기`}
+                  className="shrink-0"
+                  size={14}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onCloseLog(log.id);
+                  }}
+                />
+              </button>
+            );
+          })}
           <button
             className="rounded px-2 py-1 text-[#9fb2c2] hover:bg-[#263746] hover:text-white"
             onClick={onOpenTerminal}
@@ -174,18 +310,37 @@ export function LogDock({
         </div>
         <div className="flex items-center gap-1" />
       </header>
-      <pre
-        className="m-0 min-h-0 flex-1 overflow-auto p-[12px_16px] font-mono text-xs leading-[1.55] whitespace-pre-wrap text-[#d0e0ec]"
-        ref={previewScroll}
-        onScroll={(event) => {
-          const element = event.currentTarget;
-          stickToBottom.current =
-            element.scrollHeight - element.scrollTop - element.clientHeight <
-            24;
-        }}
-      >
-        <AnsiLogContent content={preview.content} />
-      </pre>
+      {splitLogs?.length === 2 ? (
+        <div className="flex min-h-0 flex-1">
+          <LogPreview log={splitLogs[0]} />
+          <div className="w-px shrink-0 bg-[#3a5264]" />
+          <LogPreview log={splitLogs[1]} />
+        </div>
+      ) : (
+        <LogPreview log={preview} />
+      )}
+      {dropSide && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 top-[46px] flex bg-[#0b171ed9] p-3">
+          <div
+            className={`flex flex-1 items-center justify-center border-2 text-xs font-bold ${
+              dropSide === "left"
+                ? "border-[#50d3a1] bg-[#174b3b] text-[#a6ffce]"
+                : "border-[#496373] text-[#86a0b1]"
+            }`}
+          >
+            왼쪽으로 분할
+          </div>
+          <div
+            className={`flex flex-1 items-center justify-center border-y-2 border-r-2 text-xs font-bold ${
+              dropSide === "right"
+                ? "border-[#50d3a1] bg-[#174b3b] text-[#a6ffce]"
+                : "border-[#496373] text-[#86a0b1]"
+            }`}
+          >
+            오른쪽으로 분할
+          </div>
+        </div>
+      )}
     </section>
   );
 }

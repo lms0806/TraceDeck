@@ -38,7 +38,7 @@ const emptyProfile = (): Profile => ({
 });
 
 function App() {
-  const [profiles, setProfiles] = useState(initialProfiles);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [tabs, setTabs] = useState<Tab[]>(defaultWorkspace().tabs);
   const [activeId, setActiveId] = useState(defaultWorkspace().activeId);
   const [selectedId, setSelectedId] = useState(defaultWorkspace().selectedId);

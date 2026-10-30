@@ -59,7 +59,11 @@ export function Browser({
   }, [directory.path, dockHeight, onWorkspaceChange, showTerminalDock, view]);
 
   useEffect(() => {
-    if (!active || restoredDirectory.current || !workspace?.directoryPath)
+    if (
+      !active ||
+      restoredDirectory.current ||
+      workspace?.directoryPath === undefined
+    )
       return;
     restoredDirectory.current = true;
     void directory.load(workspace.directoryPath, false, true);
@@ -90,7 +94,8 @@ export function Browser({
 
   async function renameEntry(entry: Parameters<typeof tail.openFile>[0]) {
     const newName = window.prompt("새 이름을 입력하세요.", entry.name)?.trim();
-    if (!newName || newName === entry.name) return;
+    if (newName === undefined || newName === "" || newName === entry.name)
+      return;
     try {
       await invoke("rename_remote_entry", {
         profile,
@@ -107,7 +112,7 @@ export function Browser({
   async function createEntry(kind: "file" | "directory") {
     const label = kind === "file" ? "파일" : "폴더";
     const name = window.prompt(`새 ${label} 이름을 입력하세요.`)?.trim();
-    if (!name) return;
+    if (name === undefined || name === "") return;
     try {
       await invoke(
         kind === "file" ? "create_remote_file" : "create_remote_directory",

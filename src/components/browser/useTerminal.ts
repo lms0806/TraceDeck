@@ -43,7 +43,7 @@ export function useTerminal(profile: Profile, shouldConnect: boolean) {
         terminalIdRef.current = id;
         setTerminalId(id);
         const buffered = bufferedOutput.current.get(id);
-        if (buffered) {
+        if (buffered !== undefined) {
           bufferedOutput.current.delete(id);
           setOutput(`${initialOutput}${buffered}`);
         }

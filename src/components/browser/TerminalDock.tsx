@@ -152,7 +152,7 @@ export function TerminalDock({
       )}
       <header className="flex h-[38px] items-center justify-between border-b border-[#293d4d] px-3 text-xs text-[#ccdce7]">
         <div className="flex min-w-0 items-center gap-1">
-          {logPath && onShowLog && (
+          {logPath !== undefined && onShowLog !== undefined && (
             <button
               className="flex min-w-0 items-center gap-1 rounded px-2 py-1 text-[#9fb2c2] hover:bg-[#263746] hover:text-white"
               onClick={onShowLog}

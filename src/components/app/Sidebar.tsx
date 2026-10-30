@@ -94,7 +94,7 @@ export function Sidebar({
       </div>
       <div className="grid max-h-[130px] gap-0.5 overflow-auto">
         {tabs
-          .filter((tab) => tab.profileId)
+          .filter((tab) => tab.profileId !== undefined)
           .map((tab) => (
             <div
               className="flex items-center rounded hover:bg-[#202d39]"

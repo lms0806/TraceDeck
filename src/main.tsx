@@ -66,7 +66,7 @@ function App() {
       .then((workspace) => {
         const profileIds = new Set(profiles.map((profile) => profile.id));
         const restoredTabs = workspace.tabs.filter(
-          (tab) => !tab.profileId || profileIds.has(tab.profileId),
+          (tab) => tab.profileId === undefined || profileIds.has(tab.profileId),
         );
         const restoredActiveId = restoredTabs.some(
           (tab) => tab.id === workspace.activeId,
@@ -234,7 +234,7 @@ function App() {
         />
         {activeId === "home" && <Home open={openProfile} profiles={profiles} />}
         {tabs
-          .filter((tab) => tab.profileId)
+          .filter((tab) => tab.profileId !== undefined)
           .flatMap((tab) => {
             const profile = profiles.find((item) => item.id === tab.profileId);
             if (!profile) return [];

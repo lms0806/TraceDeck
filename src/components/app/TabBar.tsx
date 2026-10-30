@@ -28,13 +28,11 @@ export function TabBar({
     const target = document
       .elementFromPoint(clientX, clientY)
       ?.closest<HTMLButtonElement>("[data-tab-id]");
-    if (!target?.dataset.tabId) return;
+    const targetId = target?.dataset.tabId;
+    if (target === null || target === undefined || targetId === undefined)
+      return;
     const bounds = target.getBoundingClientRect();
-    onMove(
-      drag.current.id,
-      target.dataset.tabId,
-      clientX > bounds.left + bounds.width / 2,
-    );
+    onMove(drag.current.id, targetId, clientX > bounds.left + bounds.width / 2);
   }
   return (
     <nav className="flex h-[42px] overflow-auto border-b border-[#293846] bg-[#151e28]">
@@ -57,7 +55,7 @@ export function TabBar({
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
         >
-          {tab.profileId ? (
+          {tab.profileId !== undefined ? (
             <FolderOpen size={15} />
           ) : tab.id === "analysis" ? (
             <ChartNoAxesCombined size={15} />

@@ -27,7 +27,7 @@ const workspaceStore = new LazyStore("workspace.json", { autoSave: 300 });
 const workspaceKey = "workspace";
 
 function isTab(value: unknown): value is Tab {
-  if (!value || typeof value !== "object") return false;
+  if (value === null || typeof value !== "object") return false;
   const tab = value as Partial<Tab>;
   return (
     typeof tab.id === "string" &&
@@ -37,7 +37,7 @@ function isTab(value: unknown): value is Tab {
 }
 
 function isBrowserWorkspace(value: unknown): value is BrowserWorkspace {
-  if (!value || typeof value !== "object") return false;
+  if (value === null || typeof value !== "object") return false;
   const state = value as Partial<BrowserWorkspace>;
   return (
     typeof state.directoryPath === "string" &&
@@ -48,7 +48,7 @@ function isBrowserWorkspace(value: unknown): value is BrowserWorkspace {
 }
 
 export function normalizeWorkspace(value: unknown): Workspace {
-  if (!value || typeof value !== "object") return defaultWorkspace();
+  if (value === null || typeof value !== "object") return defaultWorkspace();
   const saved = value as Partial<Workspace>;
   const tabs = Array.isArray(saved.tabs) ? saved.tabs.filter(isTab) : [];
   const restoredTabs = tabs.some((tab) => tab.id === "home")

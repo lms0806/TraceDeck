@@ -62,6 +62,7 @@ pub(crate) fn ssh_command(
     known_hosts_file: &Path,
 ) -> Result<Command, String> {
     let mut command = Command::new("ssh");
+    hide_console_window(&mut command);
     append_ssh_auth_args(&mut command, profile, known_hosts_file)?;
     command.arg(destination(profile));
     Ok(command)
@@ -100,6 +101,7 @@ pub(crate) fn sftp_command(
     known_hosts_file: &Path,
 ) -> Result<Command, String> {
     let mut command = Command::new("sftp");
+    hide_console_window(&mut command);
     command
         .arg("-q")
         .arg("-b")
@@ -123,3 +125,14 @@ pub(crate) fn sftp_command(
     command.arg(destination(profile));
     Ok(command)
 }
+
+#[cfg(target_os = "windows")]
+fn hide_console_window(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(target_os = "windows"))]
+fn hide_console_window(_command: &mut Command) {}

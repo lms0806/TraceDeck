@@ -136,3 +136,75 @@ fn hide_console_window(command: &mut Command) {
 
 #[cfg(not(target_os = "windows"))]
 fn hide_console_window(_command: &mut Command) {}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::{
+        destination, escape_remote_shell_path, interactive_ssh_arguments, reject_password_auth,
+        sftp_command, ssh_command, validate_remote_path,
+    };
+    use crate::models::ConnectionProfile;
+
+    fn profile(auth_kind: &str, private_key_path: Option<&str>) -> ConnectionProfile {
+        ConnectionProfile {
+            id: "test".into(),
+            name: "Test".into(),
+            host: "example.test".into(),
+            port: 2200,
+            username: "deploy".into(),
+            group: "Test".into(),
+            auth_kind: auth_kind.into(),
+            private_key_path: private_key_path.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn validates_and_escapes_remote_paths() {
+        assert!(validate_remote_path("/var/log/app.log").is_ok());
+        for invalid in ["line\nbreak", "line\rbreak", "nul\0byte"] {
+            assert!(validate_remote_path(invalid).is_err(), "{invalid:?}");
+        }
+        assert_eq!(
+            escape_remote_shell_path(r#"/var/log/a\\b\"$app`date`.log"#),
+            r#"/var/log/a\\\\b\\\"\$app\`date\`.log"#
+        );
+    }
+
+    #[test]
+    fn builds_private_key_and_agent_ssh_arguments() {
+        let known_hosts = Path::new("known_hosts");
+        let key_profile = profile("privateKey", Some("C:/keys/deploy"));
+        let arguments = interactive_ssh_arguments(&key_profile, known_hosts).unwrap();
+
+        assert_eq!(destination(&key_profile), "deploy@example.test");
+        assert!(
+            arguments
+                .windows(2)
+                .any(|pair| pair == ["-i", "C:/keys/deploy"])
+        );
+        assert_eq!(arguments.last(), Some(&"deploy@example.test".to_string()));
+
+        let agent_arguments =
+            interactive_ssh_arguments(&profile("agent", None), known_hosts).unwrap();
+        assert!(!agent_arguments.iter().any(|argument| argument == "-i"));
+        assert!(ssh_command(&profile("agent", None), known_hosts).is_ok());
+        assert!(sftp_command(&profile("agent", None), known_hosts).is_ok());
+    }
+
+    #[test]
+    fn rejects_unsupported_or_incomplete_authentication() {
+        let password = profile("password", None);
+        assert!(
+            reject_password_auth(&password, "SSH 인증")
+                .unwrap_err()
+                .contains("비밀번호")
+        );
+        assert!(
+            interactive_ssh_arguments(&profile("privateKey", None), Path::new("known_hosts"))
+                .is_err()
+        );
+        assert!(reject_password_auth(&profile("agent", None), "SSH 인증").is_ok());
+    }
+}

@@ -202,4 +202,12 @@ mod tests {
         assert!(validate_analysis_paths(&allowed).is_ok());
         assert!(validate_analysis_paths(&too_many).is_err());
     }
+
+    #[test]
+    fn rejects_unsafe_analysis_paths_without_rejecting_an_empty_selection() {
+        assert!(validate_analysis_paths(&[]).is_ok());
+        assert!(
+            validate_analysis_paths(&["/var/log/valid.log".into(), "bad\npath".into()]).is_err()
+        );
+    }
 }

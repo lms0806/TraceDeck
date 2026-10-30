@@ -79,3 +79,29 @@ pub(crate) struct SystemStatusChunk {
     pub(crate) stream_id: u64,
     pub(crate) status: RemoteSystemStatus,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ConnectionProfile;
+
+    #[test]
+    fn deserializes_legacy_profiles_and_serializes_camel_case_fields() {
+        let profile: ConnectionProfile = serde_json::from_str(
+            r#"{
+                "id":"prod",
+                "name":"Production",
+                "host":"prod.example.test",
+                "port":22,
+                "username":"deploy",
+                "group":"Production"
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(profile.auth_kind, "privateKey");
+        assert!(profile.private_key_path.is_none());
+
+        let json = serde_json::to_value(profile).unwrap();
+        assert_eq!(json["authKind"], "privateKey");
+        assert!(json.get("privateKeyPath").is_some());
+    }
+}

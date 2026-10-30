@@ -135,4 +135,20 @@ mod tests {
         assert_eq!(result.disk_total_kb, 100_000);
         assert_eq!(result.disk_percent, 25.0);
     }
+
+    #[test]
+    fn rejects_malformed_or_incomplete_status_lines() {
+        for invalid in [
+            "STATUS 44 25000 100000",
+            "STATE 44 25000 100000 25",
+            "STATUS cpu 25000 100000 25",
+            "STATUS 44 25000 100000 unknown%",
+        ] {
+            assert!(parse_status_line(invalid).is_err(), "{invalid}");
+        }
+
+        let result = parse_status_line("STATUS 0 0 100 0%").unwrap();
+        assert_eq!(result.cpu_percent, 0.0);
+        assert_eq!(result.disk_percent, 0.0);
+    }
 }

@@ -253,4 +253,21 @@ mod tests {
         assert_eq!(renamed_path("./app.log", "api.log"), "./api.log");
         assert_eq!(child_path("/", "new.log"), "/new.log");
     }
+
+    #[test]
+    fn rejects_unsafe_names_and_parses_root_entries_with_spaces() {
+        for invalid in ["", "..", "a/b", "a\\b", "a\nb", "a\0b"] {
+            assert!(validate_entry_name(invalid).is_err(), "{invalid:?}");
+        }
+
+        let listing = "total 4\n\
+                       -rw-r--r-- 1 opc staff 128 Oct 25 14:01 access log.log\n\
+                       invalid listing";
+        let entries = parse_listing(listing, "/");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "access log.log");
+        assert_eq!(entries[0].path, "/access log.log");
+        assert_eq!(renamed_path("app.log", "api.log"), "api.log");
+        assert_eq!(child_path("/var/log///", "new.log"), "/var/log/new.log");
+    }
 }

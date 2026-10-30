@@ -18,6 +18,7 @@ export default defineConfig({
   treatTagHintsAsErrors: true,
   rules: {
     cycles: "error",
+    exports: "error",
   },
   // These packages are loaded by Vite's CSS/module pipeline or initialized by
   // Tauri's runtime bridge, which Knip does not fully attribute to the React

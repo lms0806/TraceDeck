@@ -1,7 +1,7 @@
 import { useEffect, useRef, type PointerEvent } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as Xterm } from "@xterm/xterm";
-import { Columns2, File, Terminal, Trash2, X } from "lucide-react";
+import { Columns2, File, RefreshCw, Terminal, Trash2, X } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 
 import { IconButton } from "../ui/IconButton";
@@ -9,6 +9,7 @@ import { IconButton } from "../ui/IconButton";
 interface TerminalState {
   clear: () => void;
   output: string;
+  reconnect: () => void;
   resize: (columns: number, rows: number) => void;
   starting: boolean;
   terminalId: number | null;
@@ -183,6 +184,9 @@ export function TerminalDock({
           </span>
         </div>
         <div className="flex items-center gap-1">
+          <IconButton aria-label="터미널 재연결" onClick={terminal.reconnect}>
+            <RefreshCw size={15} />
+          </IconButton>
           <IconButton aria-label="터미널 출력 지우기" onClick={terminal.clear}>
             <Trash2 size={15} />
           </IconButton>

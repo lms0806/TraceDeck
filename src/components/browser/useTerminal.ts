@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -75,10 +75,20 @@ export function useTerminal(profile: Profile, shouldConnect: boolean) {
     setOutput("");
   }
 
+  const reconnect = useCallback(() => {
+    const previousId = terminalIdRef.current;
+    terminalIdRef.current = null;
+    setTerminalId(null);
+    setStarting(false);
+    setOutput("원격 터미널을 다시 연결하는 중…\n");
+    if (previousId !== null)
+      void invoke("stop_terminal", { terminalId: previousId });
+  }, []);
+
   function resize(columns: number, rows: number) {
     if (terminalId === null) return;
     void invoke("resize_terminal", { terminalId, columns, rows });
   }
 
-  return { clear, output, resize, starting, terminalId, write };
+  return { clear, output, reconnect, resize, starting, terminalId, write };
 }

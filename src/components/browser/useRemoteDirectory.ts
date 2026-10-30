@@ -9,8 +9,9 @@ export function useRemoteDirectory(
   profile: Profile,
   active: boolean,
   notify: (text: string) => void,
+  initialPath = ".",
 ) {
-  const [path, setPath] = useState(".");
+  const [path, setPath] = useState(initialPath);
   const [entries, setEntries] = useState<RemoteEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);

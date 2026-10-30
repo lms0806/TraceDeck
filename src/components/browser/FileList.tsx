@@ -80,13 +80,6 @@ export function FileList({
             <span>권한 · 소유자 · 크기</span>
           </div>
         </header>
-        {!loaded && (
-          <div className="grid min-h-[250px] place-content-center justify-items-center gap-[9px] p-[25px] text-center text-xs text-[#7e96a8] [&>strong]:text-[13px] [&>strong]:text-[#b9cad6] [&>svg]:text-[#5f8099]">
-            <FolderOpen size={34} />
-            <strong>원격 폴더를 열 준비가 됐습니다.</strong>
-            <span>“폴더 열기”를 누르면 서버의 파일 목록을 가져옵니다.</span>
-          </div>
-        )}
         {loaded && (
           <button
             className="grid w-full grid-cols-[minmax(240px,1fr)_minmax(280px,1.4fr)] gap-[15px] border-0 border-b border-[#1e2b36] bg-transparent px-[15px] py-[9px] text-left text-[#cbd8e2] hover:bg-[#1b2a35] disabled:cursor-not-allowed disabled:opacity-45 [&>span]:flex [&>span]:items-center [&>span]:gap-2 [&_b]:text-xs [&_b]:font-[550]"

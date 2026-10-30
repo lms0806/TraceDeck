@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -11,6 +11,12 @@ import { Panel } from "./components/ui/Panel";
 import { IconButton } from "./components/ui/IconButton";
 import { PrimaryButton } from "./components/ui/PrimaryButton";
 import { parseTracing, type TracingRecord } from "./logging/tracing";
+import {
+  defaultWorkspace,
+  loadWorkspace,
+  saveWorkspace,
+  type BrowserWorkspace,
+} from "./app/workspace";
 
 import type {
   ConnectionCheck,
@@ -32,9 +38,15 @@ const emptyProfile = (): Profile => ({
 
 function App() {
   const [profiles, setProfiles] = useState(initialProfiles);
-  const [tabs, setTabs] = useState<Tab[]>([{ id: "home", title: "Home" }]);
-  const [activeId, setActiveId] = useState("home");
-  const [selectedId, setSelectedId] = useState("");
+  const [tabs, setTabs] = useState<Tab[]>(defaultWorkspace().tabs);
+  const [activeId, setActiveId] = useState(defaultWorkspace().activeId);
+  const [selectedId, setSelectedId] = useState(defaultWorkspace().selectedId);
+  const [browserWorkspaces, setBrowserWorkspaces] = useState<
+    Record<string, BrowserWorkspace>
+  >({});
+  const [profilesReady, setProfilesReady] = useState(false);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  const workspaceRestored = useRef(false);
   const [notice, setNotice] = useState(
     "서버를 선택하고 ‘폴더 열기’를 눌러 원격 파일을 확인하세요.",
   );
@@ -43,8 +55,56 @@ function App() {
   useEffect(() => {
     invoke<Profile[]>("list_profiles")
       .then((saved) => saved.length && setProfiles(saved))
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => setProfilesReady(true));
   }, []);
+  useEffect(() => {
+    if (!profilesReady || workspaceRestored.current) return;
+    workspaceRestored.current = true;
+    void loadWorkspace()
+      .then((workspace) => {
+        const profileIds = new Set(profiles.map((profile) => profile.id));
+        const restoredTabs = workspace.tabs.filter(
+          (tab) => !tab.profileId || profileIds.has(tab.profileId),
+        );
+        const restoredActiveId = restoredTabs.some(
+          (tab) => tab.id === workspace.activeId,
+        )
+          ? workspace.activeId
+          : "home";
+        setTabs(restoredTabs);
+        setActiveId(restoredActiveId);
+        setSelectedId(workspace.selectedId);
+        setBrowserWorkspaces(workspace.browsers);
+      })
+      .catch(() => undefined)
+      .finally(() => setWorkspaceReady(true));
+  }, [profiles, profilesReady]);
+  useEffect(() => {
+    if (!workspaceReady) return;
+    void saveWorkspace({
+      activeId,
+      browsers: browserWorkspaces,
+      selectedId,
+      tabs,
+    }).catch(() => undefined);
+  }, [activeId, browserWorkspaces, selectedId, tabs, workspaceReady]);
+  const updateBrowserWorkspace = useCallback(
+    (profileId: string, workspace: BrowserWorkspace) => {
+      setBrowserWorkspaces((current) => {
+        const previous = current[profileId];
+        if (
+          previous?.directoryPath === workspace.directoryPath &&
+          previous.dockHeight === workspace.dockHeight &&
+          previous.showTerminalDock === workspace.showTerminalDock &&
+          previous.view === workspace.view
+        )
+          return current;
+        return { ...current, [profileId]: workspace };
+      });
+    },
+    [],
+  );
   const active = tabs.find((tab) => tab.id === activeId) ?? tabs[0];
   function openProfile(profile: Profile) {
     setSelectedId(profile.id);
@@ -92,6 +152,11 @@ function App() {
     if (!window.confirm(`저장된 세션 “${profile.name}”을 삭제할까요?`)) return;
     setProfiles((all) => all.filter((item) => item.id !== profile.id));
     setTabs((all) => all.filter((tab) => tab.profileId !== profile.id));
+    setBrowserWorkspaces((all) => {
+      const remaining = { ...all };
+      delete remaining[profile.id];
+      return remaining;
+    });
     if (selectedId === profile.id) setSelectedId("");
     if (active.profileId === profile.id) setActiveId("home");
     invoke("delete_profile", { profileId: profile.id })
@@ -184,6 +249,10 @@ function App() {
                   active={tab.id === activeId}
                   onCheck={() => check(profile)}
                   notify={setNotice}
+                  workspace={browserWorkspaces[profile.id]}
+                  onWorkspaceChange={(workspace) =>
+                    updateBrowserWorkspace(profile.id, workspace)
+                  }
                 />
               </div>
             );

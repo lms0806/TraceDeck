@@ -1,5 +1,5 @@
 import { Terminal } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 import { FileList } from "./browser/FileList";
@@ -7,6 +7,7 @@ import { LogDock } from "./browser/LogDock";
 import { RemoteStatus } from "./browser/RemoteStatus";
 import { TerminalDock } from "./browser/TerminalDock";
 import type { Profile } from "./browser/types";
+import type { BrowserWorkspace } from "../app/workspace";
 import { useRemoteDirectory } from "./browser/useRemoteDirectory";
 import { useTailStream } from "./browser/useTailStream";
 import { useTerminal } from "./browser/useTerminal";
@@ -18,21 +19,53 @@ export function Browser({
   active,
   onCheck,
   notify,
+  workspace,
+  onWorkspaceChange,
 }: {
   profile: Profile;
   active: boolean;
   onCheck: () => void;
   notify: (text: string) => void;
+  workspace?: BrowserWorkspace;
+  onWorkspaceChange: (workspace: BrowserWorkspace) => void;
 }) {
-  const [view, setView] = useState<"files" | "terminal">("files");
-  const [showTerminalDock, setShowTerminalDock] = useState(false);
-  const [dockHeight, setDockHeight] = useState(310);
-  const directory = useRemoteDirectory(profile, active, notify);
+  const [view, setView] = useState<"files" | "terminal">(
+    workspace?.view ?? "files",
+  );
+  const [showTerminalDock, setShowTerminalDock] = useState(
+    workspace?.showTerminalDock ?? false,
+  );
+  const [dockHeight, setDockHeight] = useState(workspace?.dockHeight ?? 310);
+  const directory = useRemoteDirectory(
+    profile,
+    active,
+    notify,
+    workspace?.directoryPath,
+  );
+  const restoredDirectory = useRef(false);
   const tail = useTailStream(profile);
   const terminal = useTerminal(
     profile,
     active && (view === "terminal" || showTerminalDock),
   );
+
+  useEffect(() => {
+    onWorkspaceChange({
+      directoryPath: directory.path,
+      dockHeight,
+      showTerminalDock,
+      view,
+    });
+  }, [directory.path, dockHeight, onWorkspaceChange, showTerminalDock, view]);
+
+  useEffect(() => {
+    if (!active || restoredDirectory.current || !workspace?.directoryPath)
+      return;
+    restoredDirectory.current = true;
+    void directory.load(workspace.directoryPath, false, true);
+    // Restore the previously-open directory once; subsequent refreshes are owned by the hook.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, workspace?.directoryPath]);
 
   async function deleteEntry(entry: Parameters<typeof tail.openFile>[0]) {
     const kind = entry.isDir ? "빈 폴더" : "파일";

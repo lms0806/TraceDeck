@@ -2,6 +2,8 @@ use std::{path::Path, process::Command};
 
 use crate::models::ConnectionProfile;
 
+const STRICT_HOST_KEY_CHECKING: &str = "StrictHostKeyChecking=yes";
+
 pub(crate) fn validate_remote_path(path: &str) -> Result<(), String> {
     if path.contains(['\r', '\n', '\0']) {
         return Err("유효하지 않은 원격 경로입니다.".into());
@@ -43,7 +45,7 @@ pub(crate) fn append_ssh_auth_args(
         .arg("-o")
         .arg("ConnectTimeout=10")
         .arg("-o")
-        .arg("StrictHostKeyChecking=accept-new")
+        .arg(STRICT_HOST_KEY_CHECKING)
         .arg("-o")
         .arg(format!("UserKnownHostsFile={}", known_hosts_file.display()))
         .arg("-p")
@@ -78,7 +80,7 @@ pub(crate) fn interactive_ssh_arguments(
         "-o".into(),
         "ConnectTimeout=10".into(),
         "-o".into(),
-        "StrictHostKeyChecking=accept-new".into(),
+        STRICT_HOST_KEY_CHECKING.into(),
         "-o".into(),
         format!("UserKnownHostsFile={}", known_hosts_file.display()),
         "-p".into(),
@@ -111,7 +113,7 @@ pub(crate) fn sftp_command(
         .arg("-o")
         .arg("ConnectTimeout=10")
         .arg("-o")
-        .arg("StrictHostKeyChecking=accept-new")
+        .arg(STRICT_HOST_KEY_CHECKING)
         .arg("-o")
         .arg(format!("UserKnownHostsFile={}", known_hosts_file.display()))
         .arg("-P")
@@ -179,6 +181,16 @@ mod tests {
         let arguments = interactive_ssh_arguments(&key_profile, known_hosts).unwrap();
 
         assert_eq!(destination(&key_profile), "deploy@example.test");
+        assert!(
+            arguments
+                .iter()
+                .any(|argument| argument == "StrictHostKeyChecking=yes")
+        );
+        assert!(
+            !arguments
+                .iter()
+                .any(|argument| argument == "StrictHostKeyChecking=accept-new")
+        );
         assert!(
             arguments
                 .windows(2)

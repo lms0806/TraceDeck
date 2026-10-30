@@ -231,8 +231,7 @@ export function LogDock({
             if (isSplitLog) {
               if (log.id !== splitLogIds?.[0]) return null;
               return (
-                <button
-                  aria-label={`${splitTabLabel ?? "로그"} 분할 보기`}
+                <div
                   className="flex min-w-0 items-center gap-[7px] rounded bg-[#263b4b] px-2 py-1 text-[#f1f7fb] ring-1 ring-inset ring-[#50d3a1]"
                   key="split-log-tab"
                   title="분할 보기"
@@ -244,61 +243,63 @@ export function LogDock({
                   <small className="flex items-center gap-0.5 whitespace-nowrap rounded-sm bg-[#174b3b] px-[5px] py-0.5 text-[10px] text-[#a6ffce]">
                     분할
                   </small>
-                  <X
+                  <button
                     aria-label="분할 보기 닫기"
-                    className="shrink-0"
-                    size={14}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onSplitLogIdsChange(null);
-                    }}
-                  />
-                </button>
+                    className="shrink-0 rounded p-0.5 hover:bg-[#2c6653]"
+                    onClick={() => onSplitLogIdsChange(null)}
+                    type="button"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
               );
             }
             return (
-              <button
-                aria-label={log.path}
-                className={`flex min-w-0 items-center gap-[7px] rounded px-2 py-1 ${
+              <div
+                className={`flex min-w-0 items-center gap-1 rounded px-2 py-1 ${
                   log.id === activeLogId
                     ? "bg-[#263b4b] text-[#f1f7fb]"
                     : "text-[#9fb2c2] hover:bg-[#263746] hover:text-white"
                 }`}
                 key={log.id}
-                onClick={() => {
-                  if (suppressClick.current) {
-                    suppressClick.current = false;
-                    return;
-                  }
-                  onSelectLog(log.id);
-                }}
-                onPointerDown={(event) => beginTabDrag(event, log.id)}
-                onPointerMove={moveTabDrag}
-                onPointerUp={endTabDrag}
-                onPointerCancel={() => {
-                  draggedLogId.current = null;
-                  hasMoved.current = false;
-                  pointerStart.current = null;
-                  setDropSide(null);
-                }}
               >
-                <File size={15} />
-                <span className="max-w-[220px] overflow-hidden text-ellipsis whitespace-nowrap">
-                  {log.path}
-                </span>
-                <small className="whitespace-nowrap rounded-sm bg-[#153d32] px-[5px] py-0.5 text-[10px] text-[#74d6ac]">
-                  {log.streamId === null ? "준비 중" : "tail -F 추적 중"}
-                </small>
-                <X
-                  aria-label={`${log.path} 닫기`}
-                  className="shrink-0"
-                  size={14}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onCloseLog(log.id);
+                <button
+                  aria-label={log.path}
+                  className="flex min-w-0 items-center gap-[7px]"
+                  onClick={() => {
+                    if (suppressClick.current) {
+                      suppressClick.current = false;
+                      return;
+                    }
+                    onSelectLog(log.id);
                   }}
-                />
-              </button>
+                  onPointerDown={(event) => beginTabDrag(event, log.id)}
+                  onPointerMove={moveTabDrag}
+                  onPointerUp={endTabDrag}
+                  onPointerCancel={() => {
+                    draggedLogId.current = null;
+                    hasMoved.current = false;
+                    pointerStart.current = null;
+                    setDropSide(null);
+                  }}
+                >
+                  <File size={15} />
+                  <span className="max-w-[220px] overflow-hidden text-ellipsis whitespace-nowrap">
+                    {log.path}
+                  </span>
+                  <small className="whitespace-nowrap rounded-sm bg-[#153d32] px-[5px] py-0.5 text-[10px] text-[#74d6ac]">
+                    {log.streamId === null ? "준비 중" : "tail -F 추적 중"}
+                  </small>
+                </button>
+                <button
+                  aria-label={`${log.path} 닫기`}
+                  className="shrink-0 rounded p-0.5 hover:bg-[#3a5264]"
+                  onClick={() => onCloseLog(log.id)}
+                  type="button"
+                >
+                  <X size={14} />
+                </button>
+              </div>
             );
           })}
           <button

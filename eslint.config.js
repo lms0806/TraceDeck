@@ -32,6 +32,7 @@ export default tseslint.config(
         "error",
         { prefer: "type-imports", fixStyle: "separate-type-imports" },
       ],
+      "@typescript-eslint/no-unnecessary-condition": "error",
     },
   },
 );

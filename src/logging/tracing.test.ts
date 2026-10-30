@@ -22,7 +22,7 @@ describe("parseTracing", () => {
     const [record] = parseTracing(
       "\u001b[2m2026-10-25T14:09:36.097647Z\u001b[0m \u001b[32m INFO\u001b[0m backend::api: request completed",
     );
-    expect(record?.target).toBe("backend::api");
+    expect(record.target).toBe("backend::api");
   });
 
   it("ignores non-tracing lines", () => {

@@ -19,7 +19,13 @@ export default defineConfig({
   rules: {
     cycles: "error",
   },
-  // These packages are loaded by Vite's CSS/module pipeline, which Knip does
-  // not currently attribute to the React component import graph.
-  ignoreDependencies: ["tailwindcss", "@xterm/xterm", "@xterm/addon-fit"],
+  // These packages are loaded by Vite's CSS/module pipeline or initialized by
+  // Tauri's runtime bridge, which Knip does not fully attribute to the React
+  // component import graph.
+  ignoreDependencies: [
+    "tailwindcss",
+    "@xterm/xterm",
+    "@xterm/addon-fit",
+    "@tauri-apps/plugin-store",
+  ],
 });

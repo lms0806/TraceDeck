@@ -2,19 +2,19 @@ import { LazyStore } from "@tauri-apps/plugin-store";
 
 import type { Tab } from "./types";
 
-export type BrowserWorkspace = {
+export interface BrowserWorkspace {
   directoryPath: string;
   dockHeight: number;
   showTerminalDock: boolean;
   view: "files" | "terminal";
-};
+}
 
-export type Workspace = {
+export interface Workspace {
   activeId: string;
   browsers: Record<string, BrowserWorkspace>;
   selectedId: string;
   tabs: Tab[];
-};
+}
 
 export const defaultWorkspace = (): Workspace => ({
   activeId: "home",

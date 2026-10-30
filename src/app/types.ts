@@ -1,6 +1,6 @@
 export type AuthKind = "password" | "privateKey" | "agent";
 
-export type Profile = {
+export interface Profile {
   id: string;
   name: string;
   host: string;
@@ -9,15 +9,25 @@ export type Profile = {
   group: string;
   authKind?: AuthKind;
   privateKeyPath?: string;
-};
+}
 
-export type Tab = { id: string; title: string; profileId?: string };
+export interface Tab {
+  id: string;
+  title: string;
+  profileId?: string;
+}
 
-export type ConnectionCheck = { connected: boolean; message: string };
-export type RemoteEntry = {
+export interface ConnectionCheck {
+  connected: boolean;
+  message: string;
+}
+export interface RemoteEntry {
   name: string;
   path: string;
   isDir: boolean;
   details: string;
-};
-export type LogSource = { path: string; content: string };
+}
+export interface LogSource {
+  path: string;
+  content: string;
+}

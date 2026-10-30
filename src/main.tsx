@@ -247,7 +247,7 @@ function App() {
                 <Browser
                   profile={profile}
                   active={tab.id === activeId}
-                  onCheck={() => check(profile)}
+                  onCheck={() => void check(profile)}
                   notify={setNotice}
                   workspace={browserWorkspaces[profile.id]}
                   onWorkspaceChange={(workspace) =>
@@ -676,7 +676,7 @@ function SessionDialog({
           <button
             className="flex flex-none items-center gap-1.5 rounded border border-[#3c695f] bg-[#17352e] px-2.5 py-1.5 text-[11px] font-bold text-[#78dfb5] hover:bg-[#21483e]"
             type="button"
-            onClick={chooseKey}
+            onClick={() => void chooseKey()}
           >
             <KeyRound size={14} /> 키 파일 선택
           </button>

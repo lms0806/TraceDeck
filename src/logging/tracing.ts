@@ -1,9 +1,9 @@
-export type TracingRecord = {
+export interface TracingRecord {
   timestamp: string;
   level: string;
   target: string;
   message: string;
-};
+}
 
 export function parseTracing(content: string): TracingRecord[] {
   // ANSI SGR styling is terminal metadata, not part of the tracing payload.
@@ -11,9 +11,10 @@ export function parseTracing(content: string): TracingRecord[] {
   const ansi = /\u001b\[[0-9;]*m/g;
   return content.split("\n").flatMap((raw) => {
     const line = raw.replace(ansi, "");
-    const match = line.match(
-      /^(\d{4}-\d{2}-\d{2}T\S+)\s+(TRACE|DEBUG|INFO|WARN|ERROR)\s+(.+?):\s+(.*)$/,
-    );
+    const match =
+      /^(\d{4}-\d{2}-\d{2}T\S+)\s+(TRACE|DEBUG|INFO|WARN|ERROR)\s+(.+?):\s+(.*)$/.exec(
+        line,
+      );
     if (!match) return [];
     return [
       {

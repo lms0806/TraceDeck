@@ -1,4 +1,4 @@
-export type Profile = {
+export interface Profile {
   id: string;
   name: string;
   host: string;
@@ -7,28 +7,34 @@ export type Profile = {
   group: string;
   authKind?: "password" | "privateKey" | "agent";
   privateKeyPath?: string;
-};
+}
 
-export type RemoteEntry = {
+export interface RemoteEntry {
   name: string;
   path: string;
   isDir: boolean;
   details: string;
-};
+}
 
-export type RemoteFile = {
+export interface RemoteFile {
   path: string;
   content: string;
   truncated: boolean;
-};
+}
 
-export type TailChunk = { streamId: number; chunk: string };
+export interface TailChunk {
+  streamId: number;
+  chunk: string;
+}
 
-export type TerminalChunk = { terminalId: number; chunk: string };
+export interface TerminalChunk {
+  terminalId: number;
+  chunk: string;
+}
 
-export type RemoteSystemStatus = {
+export interface RemoteSystemStatus {
   cpuPercent: number;
   diskUsedKb: number;
   diskTotalKb: number;
   diskPercent: number;
-};
+}

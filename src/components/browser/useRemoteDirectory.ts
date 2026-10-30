@@ -3,7 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type { Profile, RemoteEntry } from "./types";
 
-type CachedDirectory = { entries: RemoteEntry[]; readAt: number };
+interface CachedDirectory {
+  entries: RemoteEntry[];
+  readAt: number;
+}
 
 export function useRemoteDirectory(
   profile: Profile,

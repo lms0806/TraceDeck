@@ -7,9 +7,7 @@ describe("normalizeWorkspace", () => {
     const workspace = normalizeWorkspace({
       activeId: "server-prod",
       selectedId: "prod",
-      tabs: [
-        { id: "server-prod", title: "Production", profileId: "prod" },
-      ],
+      tabs: [{ id: "server-prod", title: "Production", profileId: "prod" }],
       browsers: {
         prod: {
           directoryPath: "/var/log/service",
@@ -21,7 +19,10 @@ describe("normalizeWorkspace", () => {
       },
     });
 
-    expect(workspace.tabs.map((tab) => tab.id)).toEqual(["home", "server-prod"]);
+    expect(workspace.tabs.map((tab) => tab.id)).toEqual([
+      "home",
+      "server-prod",
+    ]);
     expect(workspace.activeId).toBe("server-prod");
     expect(workspace.browsers).toEqual({
       prod: {

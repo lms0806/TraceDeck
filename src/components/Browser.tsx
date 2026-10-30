@@ -169,13 +169,14 @@ export function Browser({
                 className="min-w-0 flex-1 rounded border border-[#3a5061] bg-[#101820] px-[9px] py-[7px] text-[#e8f0f5]"
                 value={directory.path}
                 onChange={(event) => directory.setPath(event.target.value)}
-                onKeyDown={(event) =>
-                  event.key === "Enter" && directory.load(directory.path, true)
-                }
+                onKeyDown={(event) => {
+                  if (event.key === "Enter")
+                    void directory.load(directory.path, true);
+                }}
               />
             </label>
             <PrimaryButton
-              onClick={() => directory.load(directory.path, true)}
+              onClick={() => void directory.load(directory.path, true)}
               disabled={directory.loading}
             >
               {directory.loading ? "불러오는 중…" : "폴더 열기"}
@@ -188,7 +189,7 @@ export function Browser({
             entries={directory.entries}
             loaded={directory.loaded}
             loading={directory.loading}
-            onOpenDirectory={(path) => directory.load(path, true)}
+            onOpenDirectory={(path) => void directory.load(path, true)}
             onOpenParent={directory.parent}
             canOpenParent={directory.canOpenParent}
             onOpenFile={(entry) => {

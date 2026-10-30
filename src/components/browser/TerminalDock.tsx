@@ -6,14 +6,14 @@ import "@xterm/xterm/css/xterm.css";
 
 import { IconButton } from "../ui/IconButton";
 
-type TerminalState = {
+interface TerminalState {
   clear: () => void;
   output: string;
   resize: (columns: number, rows: number) => void;
   starting: boolean;
   terminalId: number | null;
   write: (input: string) => Promise<void>;
-};
+}
 
 export function TerminalDock({
   terminal,

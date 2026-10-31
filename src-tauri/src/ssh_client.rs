@@ -2,7 +2,7 @@ use std::{path::Path, process::Command};
 
 use crate::models::ConnectionProfile;
 
-const STRICT_HOST_KEY_CHECKING: &str = "StrictHostKeyChecking=yes";
+const STRICT_HOST_KEY_CHECKING: &str = "StrictHostKeyChecking=accept-new";
 
 pub(crate) fn validate_remote_path(path: &str) -> Result<(), String> {
     if path.contains(['\r', '\n', '\0']) {
@@ -184,12 +184,12 @@ mod tests {
         assert!(
             arguments
                 .iter()
-                .any(|argument| argument == "StrictHostKeyChecking=yes")
+                .any(|argument| argument == "StrictHostKeyChecking=accept-new")
         );
         assert!(
             !arguments
                 .iter()
-                .any(|argument| argument == "StrictHostKeyChecking=accept-new")
+                .any(|argument| argument == "StrictHostKeyChecking=no")
         );
         assert!(
             arguments

@@ -43,7 +43,7 @@ function App() {
   const [activeId, setActiveId] = useState(defaultWorkspace().activeId);
   const [selectedId, setSelectedId] = useState(defaultWorkspace().selectedId);
   const [browserWorkspaces, setBrowserWorkspaces] = useState<
-    Record<string, BrowserWorkspace>
+    Partial<Record<string, BrowserWorkspace>>
   >({});
   const [profilesReady, setProfilesReady] = useState(false);
   const [workspaceReady, setWorkspaceReady] = useState(false);
@@ -93,18 +93,12 @@ function App() {
   const updateBrowserWorkspace = useCallback(
     (profileId: string, workspace: BrowserWorkspace) => {
       setBrowserWorkspaces((current) => {
-        const previous = Object.prototype.hasOwnProperty.call(
-          current,
-          profileId,
-        )
-          ? current[profileId]
-          : undefined;
+        const previous = current[profileId];
         if (
-          previous !== undefined &&
-          previous.directoryPath === workspace.directoryPath &&
-          previous.dockHeight === workspace.dockHeight &&
-          previous.showTerminalDock === workspace.showTerminalDock &&
-          previous.view === workspace.view
+          previous?.directoryPath === workspace.directoryPath &&
+          previous?.dockHeight === workspace.dockHeight &&
+          previous?.showTerminalDock === workspace.showTerminalDock &&
+          previous?.view === workspace.view
         )
           return current;
         return { ...current, [profileId]: workspace };

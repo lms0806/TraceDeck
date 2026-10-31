@@ -11,7 +11,7 @@ export interface BrowserWorkspace {
 
 export interface Workspace {
   activeId: string;
-  browsers: Record<string, BrowserWorkspace>;
+  browsers: Partial<Record<string, BrowserWorkspace>>;
   selectedId: string;
   tabs: Tab[];
 }
@@ -58,7 +58,7 @@ export function normalizeWorkspace(value: unknown): Workspace {
     Object.entries(saved.browsers ?? {}).filter(([, state]) =>
       isBrowserWorkspace(state),
     ),
-  ) as Record<string, BrowserWorkspace>;
+  ) as Partial<Record<string, BrowserWorkspace>>;
   const activeId = restoredTabs.some((tab) => tab.id === saved.activeId)
     ? saved.activeId!
     : "home";

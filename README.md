@@ -1,4 +1,4 @@
-# Tracing Log
+# TraceDeck
 
 원격 Linux 서버를 위한 SSH 작업 공간입니다. PuTTY·MobaXterm처럼 서버에 연결하되, SFTP 파일 탐색, 실시간 로그 확인, tracing 로그 분석, ANSI 터미널을 하나의 Tauri 데스크톱 앱에서 제공합니다.
 

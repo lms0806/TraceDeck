@@ -198,7 +198,7 @@ function App() {
       <header className="col-span-2 flex items-center gap-[18px] border-b border-[#293846] bg-[#18232e] px-4">
         <div className="flex items-center gap-2 font-[750] text-white [&>svg]:text-[#50d3a1] [&>small]:ml-1 [&>small]:text-[10px] [&>small]:tracking-[1px] [&>small]:text-[#718397]">
           <CircleDot size={20} />
-          <span>Tracing Log</span>
+          <span>TraceDeck</span>
           <small>SFTP FILE BROWSER</small>
         </div>
         <PrimaryButton
@@ -413,7 +413,7 @@ function Analysis({
     <section className="min-h-0 overflow-auto px-[30px] py-[26px]">
       <header className="rounded-[9px] border border-[#355365] bg-[linear-gradient(120deg,#1e3f46,#192c39_65%)] px-6 py-[22px] [&_h1]:mb-2 [&_h1]:text-[23px] [&_h1]:text-white [&_p]:mb-[6px] [&_p]:text-[10px] [&_p]:font-extrabold [&_p]:tracking-[1.2px] [&_p]:text-[#59d6a5] [&_span]:text-xs [&_span]:text-[#a8bbc9]">
         <div>
-          <p>TRACING LOG ANALYSIS</p>
+          <p>TRACEDECK LOG ANALYSIS</p>
           <h1>원격 로그 분석</h1>
           <span>
             세션과 .log 파일을 선택하면 tracing의 레벨과 코드 모듈을 집계합니다.

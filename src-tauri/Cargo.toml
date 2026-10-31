@@ -1,12 +1,12 @@
 [package]
-name = "tracing-log-app"
+name = "trace-deck"
 version = "0.1.0"
 description = "Secure SSH terminal and log tracing desktop app"
-authors = ["Tracing Log App"]
+authors = ["TraceDeck"]
 edition = "2024"
 
 [lib]
-name = "tracing_log_app_lib"
+name = "trace_deck_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]

@@ -54,5 +54,5 @@ pub fn run() {
             remote::resize_terminal
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Tracing Log");
+        .expect("error while running TraceDeck");
 }

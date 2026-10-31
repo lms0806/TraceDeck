@@ -95,10 +95,10 @@ function App() {
       setBrowserWorkspaces((current) => {
         const previous = current[profileId];
         if (
-          previous.directoryPath === workspace.directoryPath &&
-          previous.dockHeight === workspace.dockHeight &&
-          previous.showTerminalDock === workspace.showTerminalDock &&
-          previous.view === workspace.view
+          previous?.directoryPath === workspace.directoryPath &&
+          previous?.dockHeight === workspace.dockHeight &&
+          previous?.showTerminalDock === workspace.showTerminalDock &&
+          previous?.view === workspace.view
         )
           return current;
         return { ...current, [profileId]: workspace };

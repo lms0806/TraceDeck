@@ -2,4 +2,5 @@ autoDedupe: true
 
 minimumReleaseAgeExclude:
   - knip@6.44.0
-  - lucide-react@1.64.0
+  - lucide-react@1.64.0 || 1.65.0
+  - eslint@10.14.0

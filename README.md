@@ -2,6 +2,12 @@
 
 원격 Linux 서버를 위한 SSH 작업 공간입니다. PuTTY·MobaXterm처럼 서버에 연결하되, SFTP 파일 탐색, 실시간 로그 확인, tracing 로그 분석, ANSI 터미널을 하나의 Tauri 데스크톱 앱에서 제공합니다.
 
+## 화면 예시
+
+![TraceDeck 데모 화면](docs/images/tracedeck-demo.png)
+
+위 화면은 README용으로 만든 예시이며, 모든 표시 정보는 가상의 데이터입니다.
+
 ## 주요 기능
 
 - **저장 세션**: 호스트, 포트, 사용자, 개인키 경로 또는 SSH agent 기반 연결 프로필을 로컬에 저장합니다.

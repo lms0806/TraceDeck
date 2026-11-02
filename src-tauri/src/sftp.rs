@@ -230,10 +230,10 @@ mod tests {
 
     #[test]
     fn parses_sftp_listing_and_skips_dot_entries() {
-        let listing = "drwxr-xr-x 2 opc staff 4096 Oct 25 14:00 .\n\
-                       drwxr-xr-x 2 opc staff 4096 Oct 25 14:00 ..\n\
-                       -rw-r--r-- 1 opc staff  128 Oct 25 14:01 app.log\n\
-                       drwxr-xr-x 2 opc staff 4096 Oct 25 14:02 archive";
+        let listing = "drwxr-xr-x 2 demo staff 4096 Oct 25 14:00 .\n\
+                       drwxr-xr-x 2 demo staff 4096 Oct 25 14:00 ..\n\
+                       -rw-r--r-- 1 demo staff  128 Oct 25 14:01 app.log\n\
+                       drwxr-xr-x 2 demo staff 4096 Oct 25 14:02 archive";
         let entries = parse_listing(listing, "/var/log/");
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].path, "/var/log/app.log");
@@ -261,7 +261,7 @@ mod tests {
         }
 
         let listing = "total 4\n\
-                       -rw-r--r-- 1 opc staff 128 Oct 25 14:01 access log.log\n\
+                       -rw-r--r-- 1 demo staff 128 Oct 25 14:01 access log.log\n\
                        invalid listing";
         let entries = parse_listing(listing, "/");
         assert_eq!(entries.len(), 1);

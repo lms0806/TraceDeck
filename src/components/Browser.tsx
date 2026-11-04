@@ -10,7 +10,7 @@ import type { Profile } from "./browser/types";
 import type { BrowserWorkspace } from "../app/workspace";
 import { useRemoteDirectory } from "./browser/useRemoteDirectory";
 import { useTailStream } from "./browser/useTailStream";
-import { useTerminal } from "./browser/useTerminal";
+import { useTerminalTabs } from "./browser/useTerminal";
 import { PrimaryButton } from "./ui/PrimaryButton";
 import { SecondaryButton } from "./ui/SecondaryButton";
 
@@ -52,10 +52,22 @@ export function Browser({
   const logTabLabel = hasLogSplit
     ? splitLogs.map((log) => log.path.split("/").pop() ?? log.path).join(" + ")
     : undefined;
-  const terminal = useTerminal(
+  const terminals = useTerminalTabs(
     profile,
     active && (view === "terminal" || showTerminalDock),
   );
+  const terminal =
+    terminals.activeKey === null
+      ? undefined
+      : terminals.terminalFor(terminals.activeKey);
+
+  function closeTerminal(key: number) {
+    terminals.closeTerminal(key);
+    if (terminals.sessions.length === 1) {
+      setView("files");
+      setShowTerminalDock(false);
+    }
+  }
 
   useEffect(() => {
     onWorkspaceChange({
@@ -162,11 +174,21 @@ export function Browser({
         </div>
       </header>
       {view === "terminal" ? (
-        <TerminalDock
-          terminal={terminal}
-          expanded
-          onClose={() => setView("files")}
-        />
+        terminal === undefined ? null : (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <TerminalDock
+              key={terminals.activeKey}
+              terminal={terminal}
+              expanded
+              onClose={() => setView("files")}
+              terminalTabs={terminals.sessions}
+              activeTerminalKey={terminals.activeKey}
+              onSelectTerminal={terminals.setActiveKey}
+              onAddTerminal={terminals.addTerminal}
+              onCloseTerminal={closeTerminal}
+            />
+          </div>
+        )
       ) : (
         <>
           <div className="flex items-center gap-2 border-b border-[#293846] bg-[#18232e] px-[14px] py-2.5">
@@ -214,19 +236,27 @@ export function Browser({
             onCreateFile={() => void createEntry("file")}
             onCreateDirectory={() => void createEntry("directory")}
           />
-          {showTerminalDock ? (
-            <TerminalDock
-              terminal={terminal}
-              onClose={() => setShowTerminalDock(false)}
-              logPath={tail.activeLog?.path}
-              logTabLabel={logTabLabel}
-              isLogSplit={hasLogSplit}
-              height={dockHeight}
-              onHeightChange={setDockHeight}
-              onShowLog={
-                tail.activeLog ? () => setShowTerminalDock(false) : undefined
-              }
-            />
+          {showTerminalDock && terminal !== undefined ? (
+            <div className="flex min-h-0 flex-col">
+              <TerminalDock
+                key={terminals.activeKey}
+                terminal={terminal}
+                onClose={() => setShowTerminalDock(false)}
+                logPath={tail.activeLog?.path}
+                logTabLabel={logTabLabel}
+                isLogSplit={hasLogSplit}
+                height={dockHeight}
+                onHeightChange={setDockHeight}
+                onShowLog={
+                  tail.activeLog ? () => setShowTerminalDock(false) : undefined
+                }
+                terminalTabs={terminals.sessions}
+                activeTerminalKey={terminals.activeKey}
+                onSelectTerminal={terminals.setActiveKey}
+                onAddTerminal={terminals.addTerminal}
+                onCloseTerminal={closeTerminal}
+              />
+            </div>
           ) : tail.activeLog ? (
             <LogDock
               logs={tail.logs}

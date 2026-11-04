@@ -1,20 +1,19 @@
 import { useEffect, useRef, type PointerEvent } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as Xterm } from "@xterm/xterm";
-import { Columns2, File, RefreshCw, Terminal, Trash2, X } from "lucide-react";
+import {
+  Columns2,
+  File,
+  Plus,
+  RefreshCw,
+  Terminal,
+  Trash2,
+  X,
+} from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 
 import { IconButton } from "../ui/IconButton";
-
-interface TerminalState {
-  clear: () => void;
-  output: string;
-  reconnect: () => void;
-  resize: (columns: number, rows: number) => void;
-  starting: boolean;
-  terminalId: number | null;
-  write: (input: string) => Promise<void>;
-}
+import type { TerminalState, TerminalTab } from "./useTerminal";
 
 export function TerminalDock({
   terminal,
@@ -26,6 +25,11 @@ export function TerminalDock({
   height,
   onHeightChange,
   expanded = false,
+  terminalTabs,
+  activeTerminalKey,
+  onSelectTerminal,
+  onAddTerminal,
+  onCloseTerminal,
 }: {
   terminal: TerminalState;
   onClose: () => void;
@@ -36,6 +40,11 @@ export function TerminalDock({
   height?: number;
   onHeightChange?: (height: number) => void;
   expanded?: boolean;
+  terminalTabs?: TerminalTab[];
+  activeTerminalKey?: number | null;
+  onSelectTerminal?: (key: number) => void;
+  onAddTerminal?: () => void;
+  onCloseTerminal?: (key: number) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Xterm | null>(null);
@@ -173,15 +182,59 @@ export function TerminalDock({
               )}
             </button>
           )}
-          <span className="flex items-center gap-[7px] rounded bg-[#263b4b] px-2 py-1 text-[#f1f7fb]">
-            <Terminal size={16} />
-            <span>터미널</span>
-            <small className="rounded-sm bg-[#153d32] px-[5px] py-0.5 text-[10px] text-[#74d6ac]">
-              {terminal.starting || terminal.terminalId === null
-                ? "연결 중"
-                : "연결됨"}
-            </small>
-          </span>
+          {terminalTabs === undefined ? (
+            <span className="flex items-center gap-[7px] rounded bg-[#263b4b] px-2 py-1 text-[#f1f7fb]">
+              <Terminal size={16} />
+              <span>터미널</span>
+              <small className="rounded-sm bg-[#153d32] px-[5px] py-0.5 text-[10px] text-[#74d6ac]">
+                {terminal.starting || terminal.terminalId === null
+                  ? "연결 중"
+                  : "연결됨"}
+              </small>
+            </span>
+          ) : (
+            <>
+              {terminalTabs.map((tab, index) => (
+                <span
+                  className={`flex items-center gap-1 rounded px-2 py-1 ${
+                    tab.key === activeTerminalKey
+                      ? "bg-[#263b4b] text-[#f1f7fb]"
+                      : "text-[#9fb2c2] hover:bg-[#263746]"
+                  }`}
+                  key={tab.key}
+                >
+                  <button
+                    className="flex items-center gap-[7px]"
+                    onClick={() => onSelectTerminal?.(tab.key)}
+                  >
+                    <Terminal size={16} />
+                    <span>터미널 {index + 1}</span>
+                    {tab.key === activeTerminalKey && (
+                      <small className="rounded-sm bg-[#153d32] px-[5px] py-0.5 text-[10px] text-[#74d6ac]">
+                        {terminal.starting || terminal.terminalId === null
+                          ? "연결 중"
+                          : "연결됨"}
+                      </small>
+                    )}
+                  </button>
+                  <button
+                    aria-label={`터미널 ${index + 1} 닫기`}
+                    className="rounded p-0.5 hover:bg-[#405565]"
+                    onClick={() => onCloseTerminal?.(tab.key)}
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+              <button
+                aria-label="새 터미널 열기"
+                className="rounded p-1 text-[#91cdb5] hover:bg-[#21483e]"
+                onClick={onAddTerminal}
+              >
+                <Plus size={16} />
+              </button>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <IconButton aria-label="터미널 재연결" onClick={terminal.reconnect}>

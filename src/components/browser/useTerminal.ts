@@ -6,17 +6,42 @@ import type { Profile, TerminalChunk } from "./types";
 
 const initialOutput = "원격 터미널에 연결하는 중…\n";
 
-export function useTerminal(profile: Profile, shouldConnect: boolean) {
-  const [terminalId, setTerminalId] = useState<number | null>(null);
-  const [output, setOutput] = useState("");
-  const [starting, setStarting] = useState(false);
-  const terminalIdRef = useRef<number | null>(null);
+export interface TerminalState {
+  clear: () => void;
+  output: string;
+  reconnect: () => void;
+  resize: (columns: number, rows: number) => void;
+  starting: boolean;
+  terminalId: number | null;
+  write: (input: string) => Promise<void>;
+}
+
+export interface TerminalTab {
+  key: number;
+  terminalId: number | null;
+  output: string;
+  starting: boolean;
+}
+
+export function useTerminalTabs(profile: Profile, shouldConnect: boolean) {
+  const [sessions, setSessions] = useState<TerminalTab[]>([]);
+  const [activeKey, setActiveKey] = useState<number | null>(null);
+  const sessionsRef = useRef<TerminalTab[]>([]);
   const bufferedOutput = useRef(new Map<number, string>());
+  const nextKey = useRef(1);
+  const previouslyVisible = useRef(false);
+
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     void listen<TerminalChunk>("terminal-chunk", (event) => {
-      if (event.payload.terminalId !== terminalIdRef.current) {
+      const matching = sessionsRef.current.find(
+        (session) => session.terminalId === event.payload.terminalId,
+      );
+      if (matching === undefined) {
         const previous =
           bufferedOutput.current.get(event.payload.terminalId) ?? "";
         bufferedOutput.current.set(
@@ -25,8 +50,17 @@ export function useTerminal(profile: Profile, shouldConnect: boolean) {
         );
         return;
       }
-      setOutput((current) =>
-        `${current}${event.payload.chunk}`.slice(-100_000),
+      setSessions((current) =>
+        current.map((session) =>
+          session.key === matching.key
+            ? {
+                ...session,
+                output: `${session.output}${event.payload.chunk}`.slice(
+                  -100_000,
+                ),
+              }
+            : session,
+        ),
       );
     }).then((stop) => {
       unlisten = stop;
@@ -34,61 +68,163 @@ export function useTerminal(profile: Profile, shouldConnect: boolean) {
     return () => unlisten?.();
   }, []);
 
-  useEffect(() => {
-    if (!shouldConnect || terminalId !== null || starting) return;
-    setStarting(true);
-    setOutput(initialOutput);
+  const addTerminal = useCallback(() => {
+    const key = nextKey.current++;
+    setSessions((current) => [
+      ...current,
+      { key, terminalId: null, output: initialOutput, starting: true },
+    ]);
+    setActiveKey(key);
     void invoke<number>("start_terminal", { profile })
-      .then((id) => {
-        terminalIdRef.current = id;
-        setTerminalId(id);
-        const buffered = bufferedOutput.current.get(id);
-        if (buffered !== undefined) {
-          bufferedOutput.current.delete(id);
-          setOutput(`${initialOutput}${buffered}`);
-        }
+      .then((terminalId) => {
+        const buffered = bufferedOutput.current.get(terminalId);
+        if (buffered !== undefined) bufferedOutput.current.delete(terminalId);
+        setSessions((current) =>
+          current.map((session) =>
+            session.key === key
+              ? {
+                  ...session,
+                  terminalId,
+                  output:
+                    buffered === undefined
+                      ? session.output
+                      : `${session.output}${buffered}`,
+                  starting: false,
+                }
+              : session,
+          ),
+        );
       })
-      .catch((error) =>
-        setOutput(`터미널을 열지 못했습니다.\n${String(error)}\n`),
-      )
-      .finally(() => setStarting(false));
-  }, [profile, shouldConnect, starting, terminalId]);
+      .catch((error) => {
+        setSessions((current) =>
+          current.map((session) =>
+            session.key === key
+              ? {
+                  ...session,
+                  output: `터미널을 열지 못했습니다.\n${String(error)}\n`,
+                  starting: false,
+                }
+              : session,
+          ),
+        );
+      });
+  }, [profile]);
+
+  useEffect(() => {
+    if (
+      shouldConnect &&
+      !previouslyVisible.current &&
+      sessionsRef.current.length === 0
+    )
+      addTerminal();
+    previouslyVisible.current = shouldConnect;
+  }, [addTerminal, shouldConnect]);
 
   useEffect(
     () => () => {
-      if (terminalIdRef.current !== null)
-        void invoke("stop_terminal", { terminalId: terminalIdRef.current });
+      for (const session of sessionsRef.current) {
+        if (session.terminalId !== null)
+          void invoke("stop_terminal", { terminalId: session.terminalId });
+      }
     },
     [],
   );
 
-  async function write(input: string) {
-    if (terminalId === null || !input) return;
-    try {
-      await invoke("write_terminal", { terminalId, input });
-    } catch (error) {
-      setOutput((current) => `${current}입력 전송 실패: ${String(error)}\n`);
-    }
-  }
+  const updateSession = useCallback(
+    (key: number, update: (session: TerminalTab) => TerminalTab) => {
+      setSessions((current) =>
+        current.map((session) =>
+          session.key === key ? update(session) : session,
+        ),
+      );
+    },
+    [],
+  );
 
-  function clear() {
-    setOutput("");
-  }
-
-  const reconnect = useCallback(() => {
-    const previousId = terminalIdRef.current;
-    terminalIdRef.current = null;
-    setTerminalId(null);
-    setStarting(false);
-    setOutput("원격 터미널을 다시 연결하는 중…\n");
-    if (previousId !== null)
-      void invoke("stop_terminal", { terminalId: previousId });
+  const closeTerminal = useCallback((key: number) => {
+    const removed = sessionsRef.current.find((session) => session.key === key);
+    setSessions((current) => current.filter((session) => session.key !== key));
+    setActiveKey((active) =>
+      active === key
+        ? (sessionsRef.current.filter((session) => session.key !== key).at(-1)
+            ?.key ?? null)
+        : active,
+    );
+    if (removed?.terminalId !== null && removed !== undefined)
+      void invoke("stop_terminal", { terminalId: removed.terminalId });
   }, []);
 
-  function resize(columns: number, rows: number) {
-    if (terminalId === null) return;
-    void invoke("resize_terminal", { terminalId, columns, rows });
-  }
+  const terminalFor = useCallback(
+    (key: number): TerminalState | undefined => {
+      const session = sessions.find((item) => item.key === key);
+      if (session === undefined) return undefined;
+      return {
+        terminalId: session.terminalId,
+        output: session.output,
+        starting: session.starting,
+        clear: () =>
+          updateSession(key, (current) => ({ ...current, output: "" })),
+        reconnect: () => {
+          const terminalId = sessionsRef.current.find(
+            (item) => item.key === key,
+          )?.terminalId;
+          if (terminalId !== null && terminalId !== undefined)
+            void invoke("stop_terminal", { terminalId });
+          updateSession(key, (current) => ({
+            ...current,
+            terminalId: null,
+            output: initialOutput,
+            starting: true,
+          }));
+          void invoke<number>("start_terminal", { profile })
+            .then((terminalId) =>
+              updateSession(key, (current) => ({
+                ...current,
+                terminalId,
+                starting: false,
+              })),
+            )
+            .catch((error) =>
+              updateSession(key, (current) => ({
+                ...current,
+                output: `터미널을 열지 못했습니다.\n${String(error)}\n`,
+                starting: false,
+              })),
+            );
+        },
+        resize: (columns, rows) => {
+          if (session.terminalId !== null)
+            void invoke("resize_terminal", {
+              terminalId: session.terminalId,
+              columns,
+              rows,
+            });
+        },
+        write: async (input) => {
+          if (session.terminalId === null || !input) return;
+          try {
+            await invoke("write_terminal", {
+              terminalId: session.terminalId,
+              input,
+            });
+          } catch (error) {
+            updateSession(key, (current) => ({
+              ...current,
+              output: `${current.output}입력 전송 실패: ${String(error)}\n`,
+            }));
+          }
+        },
+      };
+    },
+    [profile, sessions, updateSession],
+  );
 
-  return { clear, output, reconnect, resize, starting, terminalId, write };
+  return {
+    activeKey,
+    addTerminal,
+    closeTerminal,
+    sessions,
+    setActiveKey,
+    terminalFor,
+  };
 }

@@ -27,6 +27,7 @@ struct TraceDeckGpui {
     remote_path: String,
     remote_entries: Vec<RemoteEntry>,
     known_hosts_file: std::path::PathBuf,
+    profile_file: std::path::PathBuf,
     notice: Option<String>,
     active_log_path: Option<String>,
     log_content: String,
@@ -40,6 +41,9 @@ struct TraceDeckGpui {
     terminal_tabs: Vec<TerminalTab>,
     active_terminal_id: Option<u64>,
     terminal_focus: FocusHandle,
+    session_form_focus: FocusHandle,
+    session_draft: SessionDraft,
+    active_draft_field: DraftField,
     show_new_session_dialog: bool,
 }
 
@@ -55,15 +59,166 @@ struct TerminalTab {
     parser: vt100::Parser,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DraftField {
+    Name,
+    Host,
+    Port,
+    Username,
+    PrivateKey,
+}
+
+struct SessionDraft {
+    name: String,
+    host: String,
+    port: String,
+    username: String,
+    private_key_path: String,
+}
+
+impl Default for SessionDraft {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            host: String::new(),
+            port: "22".to_owned(),
+            username: String::new(),
+            private_key_path: String::new(),
+        }
+    }
+}
+
 impl TraceDeckGpui {
-    fn open_new_session(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn open_new_session(
+        &mut self,
+        _: &gpui::ClickEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.show_new_session_dialog = true;
+        self.session_draft = SessionDraft::default();
+        self.active_draft_field = DraftField::Name;
+        window.focus(&self.session_form_focus);
         cx.notify();
     }
 
     fn close_new_session(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.show_new_session_dialog = false;
         cx.notify();
+    }
+
+    fn activate_draft_field(
+        &mut self,
+        field: DraftField,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.active_draft_field = field;
+        window.focus(&self.session_form_focus);
+        cx.notify();
+    }
+
+    fn pick_private_key(
+        &mut self,
+        _: &gpui::ClickEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(path) = rfd::FileDialog::new()
+            .set_title("SSH 개인키 파일 선택")
+            .add_filter("개인키", &["pem", "ppk", "key"])
+            .add_filter("모든 파일", &["*"])
+            .pick_file()
+        {
+            self.session_draft.private_key_path = path.to_string_lossy().into_owned();
+            self.active_draft_field = DraftField::PrivateKey;
+            window.focus(&self.session_form_focus);
+            cx.notify();
+        }
+    }
+
+    fn edit_draft(
+        &mut self,
+        event: &gpui::KeyDownEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let key = event.keystroke.key.as_str();
+        if key == "enter" {
+            self.persist_new_session(cx);
+            return;
+        }
+        let value = match self.active_draft_field {
+            DraftField::Name => &mut self.session_draft.name,
+            DraftField::Host => &mut self.session_draft.host,
+            DraftField::Port => &mut self.session_draft.port,
+            DraftField::Username => &mut self.session_draft.username,
+            DraftField::PrivateKey => &mut self.session_draft.private_key_path,
+        };
+        match key {
+            "backspace" => {
+                value.pop();
+            }
+            "space" => value.push(' '),
+            character if character.chars().count() == 1 => value.push_str(character),
+            _ => return,
+        }
+        cx.notify();
+    }
+
+    fn save_new_session(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+        self.persist_new_session(cx);
+    }
+
+    fn persist_new_session(&mut self, cx: &mut Context<Self>) {
+        let draft = &self.session_draft;
+        let port = match draft.port.parse::<u16>().ok().filter(|port| *port > 0) {
+            Some(port) => port,
+            None => {
+                self.notice = Some("포트는 1~65535 사이의 숫자로 입력하세요.".to_owned());
+                cx.notify();
+                return;
+            }
+        };
+        if draft.name.trim().is_empty()
+            || draft.host.trim().is_empty()
+            || draft.username.trim().is_empty()
+        {
+            self.notice = Some("세션 이름, 호스트, 계정은 필수입니다.".to_owned());
+            cx.notify();
+            return;
+        }
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |duration| duration.as_millis());
+        let profile = ConnectionProfile {
+            id: format!("gpui-{unique}"),
+            name: draft.name.trim().to_owned(),
+            host: draft.host.trim().to_owned(),
+            port,
+            username: draft.username.trim().to_owned(),
+            group: "Saved Sessions".to_owned(),
+            auth_kind: if draft.private_key_path.trim().is_empty() {
+                "agent".to_owned()
+            } else {
+                "privateKey".to_owned()
+            },
+            private_key_path: (!draft.private_key_path.trim().is_empty())
+                .then(|| draft.private_key_path.trim().to_owned()),
+        };
+        match ProfileStore::new(self.profile_file.clone()).save(profile.clone()) {
+            Ok(()) => {
+                self.profiles.push(profile.clone());
+                self.show_new_session_dialog = false;
+                self.session_draft = SessionDraft::default();
+                self.notice = None;
+                self.select_profile(profile.id, cx);
+            }
+            Err(error) => {
+                self.notice = Some(format!("세션을 저장하지 못했습니다: {error}"));
+                cx.notify();
+            }
+        }
     }
 
     fn select_profile(&mut self, profile_id: String, cx: &mut Context<Self>) {
@@ -850,6 +1005,9 @@ impl TraceDeckGpui {
                     .p(px(22.0))
                     .flex()
                     .flex_col()
+                    .id("new-session-form")
+                    .track_focus(&self.session_form_focus)
+                    .on_key_down(cx.listener(Self::edit_draft))
                     .gap(px(16.0))
                     .child(
                         div()
@@ -862,14 +1020,43 @@ impl TraceDeckGpui {
                             "세션 이름, 호스트, 포트, 계정과 인증 방식을 입력하는 화면입니다.",
                         ),
                     )
-                    .child(self.form_field("세션 이름", "예: 운영 로그 서버"))
-                    .child(self.form_field("호스트", "예: server.example.com"))
+                    .child(self.form_field(DraftField::Name, "세션 이름", "예: 운영 로그 서버", cx))
+                    .child(self.form_field(DraftField::Host, "호스트", "예: server.example.com", cx))
                     .child(
                         div()
                             .flex()
                             .gap(px(12.0))
-                            .child(self.form_field("포트", "22").flex_1())
-                            .child(self.form_field("계정", "사용자 이름").flex_1()),
+                            .child(self.form_field(DraftField::Port, "포트", "22", cx).flex_1())
+                            .child(self.form_field(DraftField::Username, "계정", "사용자 이름", cx).flex_1()),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_end()
+                            .gap(px(10.0))
+                            .child(
+                                self.form_field(
+                                    DraftField::PrivateKey,
+                                    "개인키 경로 (선택)",
+                                    "비우면 SSH agent 사용",
+                                    cx,
+                                )
+                                .flex_1(),
+                            )
+                            .child(
+                                div()
+                                    .id("pick-private-key")
+                                    .cursor_pointer()
+                                    .rounded_md()
+                                    .border_1()
+                                    .border_color(rgb(0x40566b))
+                                    .px(px(12.0))
+                                    .py(px(9.0))
+                                    .text_sm()
+                                    .hover(|style| style.bg(rgb(0x263849)))
+                                    .child("파일 선택")
+                                    .on_click(cx.listener(Self::pick_private_key)),
+                            ),
                     )
                     .child(
                         div()
@@ -879,7 +1066,7 @@ impl TraceDeckGpui {
                             .py(px(10.0))
                             .text_xs()
                             .text_color(rgb(MUTED_TEXT))
-                            .child("입력 및 ProfileStore 저장은 3단계에서 연결됩니다."),
+                            .child("입력 후 저장하고 열기를 누르면 ProfileStore에 저장하고 SFTP 연결을 시작합니다."),
                     )
                     .child(
                         div()
@@ -902,19 +1089,44 @@ impl TraceDeckGpui {
                             )
                             .child(
                                 div()
+                                    .id("save-new-session")
+                                    .cursor_pointer()
                                     .rounded_md()
-                                    .bg(rgb(0x31564e))
+                                    .bg(rgb(0x267f67))
                                     .px(px(14.0))
                                     .py(px(8.0))
                                     .text_sm()
-                                    .text_color(rgb(0xa2c8bf))
-                                    .child("저장하고 열기"),
+                                    .text_color(gpui::white())
+                                    .hover(|style| style.bg(rgb(ACCENT)))
+                                    .child("저장하고 열기")
+                                    .on_click(cx.listener(Self::save_new_session)),
                             ),
                     ),
             )
     }
 
-    fn form_field(&self, label: &str, placeholder: &str) -> Div {
+    fn form_field(
+        &self,
+        field: DraftField,
+        label: &str,
+        placeholder: &str,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let value = match field {
+            DraftField::Name => &self.session_draft.name,
+            DraftField::Host => &self.session_draft.host,
+            DraftField::Port => &self.session_draft.port,
+            DraftField::Username => &self.session_draft.username,
+            DraftField::PrivateKey => &self.session_draft.private_key_path,
+        };
+        let active = self.active_draft_field == field;
+        let id = match field {
+            DraftField::Name => "session-name",
+            DraftField::Host => "session-host",
+            DraftField::Port => "session-port",
+            DraftField::Username => "session-username",
+            DraftField::PrivateKey => "session-private-key",
+        };
         div()
             .flex()
             .flex_col()
@@ -927,14 +1139,27 @@ impl TraceDeckGpui {
             )
             .child(
                 div()
+                    .id(id)
+                    .cursor_text()
                     .rounded_md()
                     .border_1()
-                    .border_color(rgb(0x40566b))
+                    .border_color(if active { rgb(ACCENT) } else { rgb(0x40566b) })
                     .px(px(10.0))
                     .py(px(9.0))
                     .text_sm()
-                    .text_color(rgb(0x6e8497))
-                    .child(placeholder.to_owned()),
+                    .text_color(if value.is_empty() {
+                        rgb(0x6e8497)
+                    } else {
+                        rgb(0xe5edf5)
+                    })
+                    .child(if value.is_empty() {
+                        placeholder.to_owned()
+                    } else {
+                        value.clone()
+                    })
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.activate_draft_field(field, window, cx);
+                    })),
             )
     }
 }
@@ -970,6 +1195,7 @@ struct InitialState {
     core_status: String,
     profiles: Vec<ConnectionProfile>,
     known_hosts_file: std::path::PathBuf,
+    profile_file: std::path::PathBuf,
 }
 
 fn initialize_core() -> InitialState {
@@ -984,11 +1210,13 @@ fn initialize_core() -> InitialState {
                     core_status: format!("저장 세션 {}개를 불러왔습니다.", profiles.len()),
                     profiles,
                     known_hosts_file: paths.known_hosts_file(),
+                    profile_file: paths.profile_file(),
                 },
                 Err(error) => InitialState {
                     core_status: format!("저장 세션을 읽지 못했습니다: {error}"),
                     profiles: Vec::new(),
                     known_hosts_file: paths.known_hosts_file(),
+                    profile_file: paths.profile_file(),
                 },
             }
         }
@@ -996,6 +1224,7 @@ fn initialize_core() -> InitialState {
             core_status: format!("trace-deck-core 초기화 실패: {error}"),
             profiles: Vec::new(),
             known_hosts_file: std::path::PathBuf::new(),
+            profile_file: std::path::PathBuf::new(),
         },
     }
 }
@@ -1012,6 +1241,7 @@ fn main() {
             },
             |window, cx| {
                 let terminal_focus = cx.focus_handle();
+                let session_form_focus = cx.focus_handle();
                 let view = cx.new(|_| TraceDeckGpui {
                     core_status: initial_state.core_status.clone(),
                     profiles: initial_state.profiles.clone(),
@@ -1019,6 +1249,7 @@ fn main() {
                     remote_path: "/".to_owned(),
                     remote_entries: Vec::new(),
                     known_hosts_file: initial_state.known_hosts_file.clone(),
+                    profile_file: initial_state.profile_file.clone(),
                     notice: None,
                     active_log_path: None,
                     log_content: String::new(),
@@ -1032,6 +1263,9 @@ fn main() {
                     terminal_tabs: Vec::new(),
                     active_terminal_id: None,
                     terminal_focus,
+                    session_form_focus,
+                    session_draft: SessionDraft::default(),
+                    active_draft_field: DraftField::Name,
                     show_new_session_dialog: false,
                 });
                 let event_view = view.clone();

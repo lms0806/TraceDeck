@@ -1,46 +1,84 @@
 use std::{
+    collections::HashMap,
     io::{Read, Write},
     path::Path,
-    sync::atomic::Ordering,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
     thread,
 };
 
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
-use tauri::{Emitter, Manager};
+use serde::Serialize;
 
 use crate::{
-    models::{ConnectionProfile, TerminalChunk},
-    state::{TerminalProcess, TerminalSessions},
+    ConnectionProfile,
+    ssh::{interactive_ssh_arguments, reject_password_auth},
 };
-use trace_deck_core::ssh::{interactive_ssh_arguments, reject_password_auth};
 
-pub(crate) fn start_terminal(
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalChunk {
+    pub terminal_id: u64,
+    pub chunk: String,
+}
+
+struct TerminalProcess {
+    child: Box<dyn portable_pty::Child + Send + Sync>,
+    master: Box<dyn portable_pty::MasterPty + Send>,
+    writer: Box<dyn Write + Send>,
+}
+
+/// Owns every PTY-backed SSH terminal independently of the UI runtime.
+#[derive(Clone)]
+pub struct TerminalSessions {
+    processes: Arc<Mutex<HashMap<u64, TerminalProcess>>>,
+    next_id: Arc<AtomicU64>,
+}
+
+impl TerminalSessions {
+    pub fn new() -> Self {
+        Self {
+            processes: Arc::new(Mutex::new(HashMap::new())),
+            next_id: Arc::new(AtomicU64::new(1)),
+        }
+    }
+}
+
+impl Default for TerminalSessions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub fn start_terminal<F>(
     profile: &ConnectionProfile,
     known_hosts_file: &Path,
-    app: tauri::AppHandle,
     sessions: &TerminalSessions,
-) -> Result<u64, String> {
+    emit: F,
+) -> Result<u64, String>
+where
+    F: Fn(TerminalChunk) + Send + Sync + 'static,
+{
     reject_password_auth(profile, "대화형 터미널")?;
     let terminal_id = sessions.next_id.fetch_add(1, Ordering::Relaxed);
     let profile = profile.clone();
     let known_hosts_file = known_hosts_file.to_path_buf();
-    let app_for_thread = app.clone();
+    let sessions = sessions.clone();
+    let emit: Arc<dyn Fn(TerminalChunk) + Send + Sync> = Arc::new(emit);
     thread::spawn(move || {
-        let sessions = app_for_thread.state::<TerminalSessions>();
         if let Err(error) = start_terminal_process(
             &profile,
             &known_hosts_file,
             terminal_id,
-            app_for_thread.clone(),
             &sessions,
+            Arc::clone(&emit),
         ) {
-            let _ = app_for_thread.emit(
-                "terminal-chunk",
-                TerminalChunk {
-                    terminal_id,
-                    chunk: format!("\r\n터미널 연결에 실패했습니다: {error}\r\n"),
-                },
-            );
+            emit(TerminalChunk {
+                terminal_id,
+                chunk: format!("\r\n터미널 연결에 실패했습니다: {error}\r\n"),
+            });
         }
     });
     Ok(terminal_id)
@@ -50,8 +88,8 @@ fn start_terminal_process(
     profile: &ConnectionProfile,
     known_hosts_file: &Path,
     terminal_id: u64,
-    app: tauri::AppHandle,
     sessions: &TerminalSessions,
+    emit: Arc<dyn Fn(TerminalChunk) + Send + Sync>,
 ) -> Result<(), String> {
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -84,15 +122,15 @@ fn start_terminal_process(
             terminal_id,
             TerminalProcess {
                 child,
-                _master: master,
+                master,
                 writer,
             },
         );
-    forward_output(reader, terminal_id, app);
+    forward_output(reader, terminal_id, emit);
     Ok(())
 }
 
-pub(crate) fn write_terminal(
+pub fn write_terminal(
     terminal_id: u64,
     input: String,
     sessions: &TerminalSessions,
@@ -114,7 +152,7 @@ pub(crate) fn write_terminal(
         .map_err(|error| format!("터미널 입력을 보내지 못했습니다: {error}"))
 }
 
-pub(crate) fn stop_terminal(terminal_id: u64, sessions: &TerminalSessions) -> Result<(), String> {
+pub fn stop_terminal(terminal_id: u64, sessions: &TerminalSessions) -> Result<(), String> {
     if let Some(mut process) = sessions
         .processes
         .lock()
@@ -126,7 +164,7 @@ pub(crate) fn stop_terminal(terminal_id: u64, sessions: &TerminalSessions) -> Re
     Ok(())
 }
 
-pub(crate) fn resize_terminal(
+pub fn resize_terminal(
     terminal_id: u64,
     columns: u16,
     rows: u16,
@@ -140,7 +178,7 @@ pub(crate) fn resize_terminal(
         .get_mut(&terminal_id)
         .ok_or("이미 종료된 터미널 세션입니다.")?;
     process
-        ._master
+        .master
         .resize(PtySize {
             rows: rows.clamp(1, 200),
             cols: columns.clamp(1, 400),
@@ -150,7 +188,11 @@ pub(crate) fn resize_terminal(
         .map_err(|error| format!("터미널 크기를 조정하지 못했습니다: {error}"))
 }
 
-fn forward_output<R: Read + Send + 'static>(reader: R, terminal_id: u64, app: tauri::AppHandle) {
+fn forward_output<R: Read + Send + 'static>(
+    reader: R,
+    terminal_id: u64,
+    emit: Arc<dyn Fn(TerminalChunk) + Send + Sync>,
+) {
     thread::spawn(move || {
         let mut reader = reader;
         let mut buffer = [0_u8; 4096];
@@ -159,13 +201,10 @@ fn forward_output<R: Read + Send + 'static>(reader: R, terminal_id: u64, app: ta
                 Ok(0) | Err(_) => break,
                 Ok(count) => count,
             };
-            let _ = app.emit(
-                "terminal-chunk",
-                TerminalChunk {
-                    terminal_id,
-                    chunk: String::from_utf8_lossy(&buffer[..count]).into_owned(),
-                },
-            );
+            emit(TerminalChunk {
+                terminal_id,
+                chunk: String::from_utf8_lossy(&buffer[..count]).into_owned(),
+            });
         }
     });
 }

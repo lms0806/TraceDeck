@@ -2,7 +2,6 @@ mod models;
 mod profiles;
 mod remote;
 mod state;
-mod terminal;
 
 use tauri::Manager;
 use trace_deck_core::AppPaths;

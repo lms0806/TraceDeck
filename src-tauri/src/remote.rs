@@ -7,7 +7,7 @@ use crate::{
 use trace_deck_core::{
     logs, sftp,
     ssh::{reject_password_auth, ssh_command},
-    system,
+    system, terminal,
 };
 
 #[tauri::command]
@@ -51,7 +51,9 @@ pub(crate) fn start_terminal(
     state: State<'_, AppState>,
     sessions: State<'_, TerminalSessions>,
 ) -> Result<u64, String> {
-    crate::terminal::start_terminal(&profile, &state.known_hosts_file, app, &sessions)
+    terminal::start_terminal(&profile, &state.known_hosts_file, &sessions, move |chunk| {
+        let _ = app.emit("terminal-chunk", chunk);
+    })
 }
 
 #[tauri::command]
@@ -60,7 +62,7 @@ pub(crate) fn write_terminal(
     input: String,
     sessions: State<'_, TerminalSessions>,
 ) -> Result<(), String> {
-    crate::terminal::write_terminal(terminal_id, input, &sessions)
+    terminal::write_terminal(terminal_id, input, &sessions)
 }
 
 #[tauri::command]
@@ -68,7 +70,7 @@ pub(crate) fn stop_terminal(
     terminal_id: u64,
     sessions: State<'_, TerminalSessions>,
 ) -> Result<(), String> {
-    crate::terminal::stop_terminal(terminal_id, &sessions)
+    terminal::stop_terminal(terminal_id, &sessions)
 }
 
 #[tauri::command]
@@ -78,7 +80,7 @@ pub(crate) fn resize_terminal(
     rows: u16,
     sessions: State<'_, TerminalSessions>,
 ) -> Result<(), String> {
-    crate::terminal::resize_terminal(terminal_id, columns, rows, &sessions)
+    terminal::resize_terminal(terminal_id, columns, rows, &sessions)
 }
 
 #[tauri::command]

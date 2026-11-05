@@ -6,9 +6,11 @@ mod profiles;
 pub mod sftp;
 pub mod ssh;
 pub mod system;
+pub mod terminal;
 
 pub use logs::{LogSource, RemoteFile, TailChunk, TailStreams};
 pub use paths::AppPaths;
 pub use profiles::{ConnectionProfile, ProfileStore};
 pub use sftp::RemoteEntry;
 pub use system::{RemoteSystemStatus, SystemStatusChunk, SystemStreams};
+pub use terminal::{TerminalChunk, TerminalSessions};

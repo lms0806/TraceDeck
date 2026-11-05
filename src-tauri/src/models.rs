@@ -1,34 +1,12 @@
 use serde::Serialize;
 
-pub(crate) use trace_deck_core::{ConnectionProfile, RemoteEntry};
+pub(crate) use trace_deck_core::{ConnectionProfile, LogSource, RemoteEntry, RemoteFile};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ConnectionCheck {
     pub(crate) connected: bool,
     pub(crate) message: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RemoteFile {
-    pub(crate) path: String,
-    pub(crate) content: String,
-    pub(crate) truncated: bool,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct LogSource {
-    pub(crate) path: String,
-    pub(crate) content: String,
-}
-
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct TailChunk {
-    pub(crate) stream_id: u64,
-    pub(crate) chunk: String,
 }
 
 #[derive(Clone, serde::Serialize)]

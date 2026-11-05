@@ -1,13 +1,12 @@
-use tauri::State;
+use tauri::{Emitter, State};
 
 use crate::{
-    logs,
     models::{ConnectionCheck, ConnectionProfile, LogSource, RemoteEntry, RemoteFile},
     state::{AppState, SystemStreams, TailStreams, TerminalSessions},
     system,
 };
 use trace_deck_core::{
-    sftp,
+    logs, sftp,
     ssh::{reject_password_auth, ssh_command},
 };
 
@@ -184,7 +183,15 @@ pub(crate) fn start_tail_stream(
     state: State<'_, AppState>,
     streams: State<'_, TailStreams>,
 ) -> Result<u64, String> {
-    logs::start_tail_stream(&profile, &path, &state.known_hosts_file, app, &streams)
+    logs::start_tail_stream(
+        &profile,
+        &path,
+        &state.known_hosts_file,
+        &streams,
+        move |chunk| {
+            let _ = app.emit("tail-chunk", chunk);
+        },
+    )
 }
 
 #[tauri::command]

@@ -1,23 +1,67 @@
 use std::{
+    collections::HashMap,
     io::{BufRead, BufReader},
     path::Path,
-    process::Stdio,
-    sync::atomic::Ordering,
+    process::{Child, Stdio},
+    sync::{
+        Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
     thread,
     time::Duration,
 };
 
-use tauri::Emitter;
+use serde::Serialize;
 
 use crate::{
-    models::{ConnectionProfile, LogSource, RemoteEntry, RemoteFile, TailChunk},
-    state::TailStreams,
-};
-use trace_deck_core::ssh::{
-    escape_remote_shell_path, reject_password_auth, ssh_command, validate_remote_path,
+    ConnectionProfile, RemoteEntry,
+    ssh::{escape_remote_shell_path, reject_password_auth, ssh_command, validate_remote_path},
 };
 
-pub(crate) fn find_log_files(
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteFile {
+    pub path: String,
+    pub content: String,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogSource {
+    pub path: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TailChunk {
+    pub stream_id: u64,
+    pub chunk: String,
+}
+
+/// Owns running tail processes independently of any UI framework.
+pub struct TailStreams {
+    children: Mutex<HashMap<u64, Child>>,
+    next_id: AtomicU64,
+}
+
+impl TailStreams {
+    pub fn new() -> Self {
+        Self {
+            children: Mutex::new(HashMap::new()),
+            next_id: AtomicU64::new(1),
+        }
+    }
+}
+
+impl Default for TailStreams {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub fn find_log_files(
     profile: &ConnectionProfile,
     path: &str,
     known_hosts_file: &Path,
@@ -41,7 +85,7 @@ pub(crate) fn find_log_files(
         .collect())
 }
 
-pub(crate) fn read_recent_file(
+pub fn read_recent_file(
     profile: &ConnectionProfile,
     path: String,
     known_hosts_file: &Path,
@@ -60,7 +104,7 @@ pub(crate) fn read_recent_file(
     })
 }
 
-pub(crate) fn read_for_analysis(
+pub fn read_for_analysis(
     profile: &ConnectionProfile,
     paths: Vec<String>,
     known_hosts_file: &Path,
@@ -84,20 +128,16 @@ pub(crate) fn read_for_analysis(
         .collect()
 }
 
-fn validate_analysis_paths(paths: &[String]) -> Result<(), String> {
-    if paths.len() > 10 {
-        return Err("한 번에 분석할 수 있는 로그 파일은 최대 10개입니다.".into());
-    }
-    paths.iter().try_for_each(|path| validate_remote_path(path))
-}
-
-pub(crate) fn start_tail_stream(
+pub fn start_tail_stream<F>(
     profile: &ConnectionProfile,
     path: &str,
     known_hosts_file: &Path,
-    app: tauri::AppHandle,
     streams: &TailStreams,
-) -> Result<u64, String> {
+    emit: F,
+) -> Result<u64, String>
+where
+    F: Fn(TailChunk) + Send + 'static,
+{
     reject_password_auth(profile, "실시간 로그 추적")?;
     validate_remote_path(path)?;
     let mut command = ssh_command(profile, known_hosts_file)?;
@@ -125,15 +165,10 @@ pub(crate) fn start_tail_stream(
         thread::sleep(Duration::from_millis(200));
         for line in BufReader::new(stdout).lines() {
             match line {
-                Ok(line) => {
-                    let _ = app.emit(
-                        "tail-chunk",
-                        TailChunk {
-                            stream_id,
-                            chunk: format!("{line}\n"),
-                        },
-                    );
-                }
+                Ok(line) => emit(TailChunk {
+                    stream_id,
+                    chunk: format!("{line}\n"),
+                }),
                 Err(_) => break,
             }
         }
@@ -141,7 +176,7 @@ pub(crate) fn start_tail_stream(
     Ok(stream_id)
 }
 
-pub(crate) fn stop_tail_stream(stream_id: u64, streams: &TailStreams) -> Result<(), String> {
+pub fn stop_tail_stream(stream_id: u64, streams: &TailStreams) -> Result<(), String> {
     if let Some(mut child) = streams
         .children
         .lock()
@@ -151,6 +186,13 @@ pub(crate) fn stop_tail_stream(stream_id: u64, streams: &TailStreams) -> Result<
         let _ = child.kill();
     }
     Ok(())
+}
+
+fn validate_analysis_paths(paths: &[String]) -> Result<(), String> {
+    if paths.len() > 10 {
+        return Err("한 번에 분석할 수 있는 로그 파일은 최대 10개입니다.".into());
+    }
+    paths.iter().try_for_each(|path| validate_remote_path(path))
 }
 
 fn run_ssh(
@@ -178,7 +220,7 @@ fn run_ssh(
 #[cfg(test)]
 mod tests {
     use super::validate_analysis_paths;
-    use trace_deck_core::ssh::{escape_remote_shell_path, validate_remote_path};
+    use crate::ssh::{escape_remote_shell_path, validate_remote_path};
 
     #[test]
     fn rejects_unsafe_paths_and_escapes_shell_metacharacters() {

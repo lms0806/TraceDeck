@@ -1,4 +1,3 @@
-mod logs;
 mod models;
 mod profiles;
 mod remote;

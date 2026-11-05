@@ -8,6 +8,8 @@ use std::{
 
 use trace_deck_core::{AppPaths, ProfileStore};
 
+pub(crate) use trace_deck_core::TailStreams;
+
 pub(crate) struct AppState {
     pub(crate) paths: AppPaths,
     pub(crate) known_hosts_file: PathBuf,
@@ -27,11 +29,6 @@ impl AppState {
     }
 }
 
-pub(crate) struct TailStreams {
-    pub(crate) children: Mutex<HashMap<u64, Child>>,
-    pub(crate) next_id: AtomicU64,
-}
-
 pub(crate) struct SystemStreams {
     pub(crate) children: Mutex<HashMap<u64, Child>>,
     pub(crate) next_id: AtomicU64,
@@ -46,15 +43,6 @@ pub(crate) struct TerminalProcess {
 pub(crate) struct TerminalSessions {
     pub(crate) processes: Mutex<HashMap<u64, TerminalProcess>>,
     pub(crate) next_id: AtomicU64,
-}
-
-impl TailStreams {
-    pub(crate) fn new() -> Self {
-        Self {
-            children: Mutex::new(HashMap::new()),
-            next_id: AtomicU64::new(1),
-        }
-    }
 }
 
 impl SystemStreams {

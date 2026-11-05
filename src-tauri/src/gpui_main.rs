@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use async_channel::Sender;
 use gpui::{
-    App, Application, Bounds, Context, Div, FocusHandle, HighlightStyle, IntoElement, Render,
-    ScrollHandle, StatefulInteractiveElement, StyledText, Window, WindowBounds, WindowOptions, div,
-    prelude::*, px, rgb, size,
+    App, Application, Bounds, Context, Div, FocusHandle, HighlightStyle, IntoElement, MouseButton,
+    Render, ScrollHandle, StatefulInteractiveElement, StyledText, Window, WindowBounds,
+    WindowOptions, div, prelude::*, px, rgb, size,
 };
 use trace_deck_core::{
     AppPaths, ConnectionProfile, ProfileStore, RemoteEntry, RemoteSystemStatus, SystemStatusChunk,
@@ -54,6 +54,10 @@ struct TraceDeckGpui {
     active_bottom_panel: BottomPanel,
     bottom_panel_height: f32,
     show_new_session_dialog: bool,
+    file_action: Option<FileAction>,
+    file_action_name: String,
+    file_action_focus: FocusHandle,
+    context_menu: Option<ContextMenu>,
 }
 
 enum StreamEvent {
@@ -66,6 +70,13 @@ struct TerminalTab {
     terminal_id: u64,
     title: String,
     parser: vt100::Parser,
+}
+
+#[derive(Clone)]
+struct ContextMenu {
+    entry: RemoteEntry,
+    x: f32,
+    y: f32,
 }
 
 struct ResizeDragPreview;
@@ -89,6 +100,12 @@ enum DraftField {
 enum BottomPanel {
     Log,
     Terminal,
+}
+
+#[derive(Clone)]
+enum FileAction {
+    Rename(RemoteEntry),
+    Delete(RemoteEntry),
 }
 
 struct SessionDraft {
@@ -333,6 +350,7 @@ impl TraceDeckGpui {
 
     fn select_profile(&mut self, profile_id: String, cx: &mut Context<Self>) {
         self.stop_streams();
+        self.context_menu = None;
         self.selected_profile_id = Some(profile_id);
         self.active_log_path = None;
         self.log_content.clear();
@@ -345,7 +363,153 @@ impl TraceDeckGpui {
         self.load_directory(path, cx);
     }
 
+    fn close_session(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+        self.stop_streams();
+        self.selected_profile_id = None;
+        self.remote_entries.clear();
+        self.active_log_path = None;
+        self.log_content.clear();
+        self.remote_status = None;
+        self.context_menu = None;
+        cx.notify();
+    }
+
+    fn delete_profile(
+        &mut self,
+        profile_id: String,
+        _: &gpui::ClickEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match ProfileStore::new(self.profile_file.clone()).delete(&profile_id) {
+            Ok(()) => {
+                if self.selected_profile_id.as_deref() == Some(profile_id.as_str()) {
+                    self.stop_streams();
+                    self.selected_profile_id = None;
+                    self.remote_entries.clear();
+                }
+                self.profiles.retain(|profile| profile.id != profile_id);
+            }
+            Err(error) => self.notice = Some(error),
+        }
+        cx.notify();
+    }
+
+    fn begin_file_action(
+        &mut self,
+        action: FileAction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.file_action_name = match &action {
+            FileAction::Rename(entry) => entry.name.clone(),
+            _ => String::new(),
+        };
+        self.file_action = Some(action);
+        self.context_menu = None;
+        window.focus(&self.file_action_focus);
+        cx.notify();
+    }
+
+    fn open_entry_context(
+        &mut self,
+        entry: RemoteEntry,
+        event: &gpui::MouseDownEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if event.button == MouseButton::Right {
+            self.context_menu = Some(ContextMenu {
+                entry,
+                x: f32::from(event.position.x),
+                y: f32::from(event.position.y),
+            });
+            cx.notify();
+        }
+    }
+
+    fn dismiss_context_menu(
+        &mut self,
+        _: &gpui::MouseDownEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.context_menu.take().is_some() {
+            cx.notify();
+        }
+    }
+
+    fn edit_file_action(
+        &mut self,
+        event: &gpui::KeyDownEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match event.keystroke.key.as_str() {
+            "enter" => self.confirm_file_action(cx),
+            "escape" => {
+                self.file_action = None;
+                cx.notify();
+            }
+            "backspace" => {
+                self.file_action_name.pop();
+                cx.notify();
+            }
+            "space" => {
+                self.file_action_name.push(' ');
+                cx.notify();
+            }
+            character if character.chars().count() == 1 => {
+                self.file_action_name.push_str(character);
+                cx.notify();
+            }
+            _ => {}
+        }
+    }
+
+    fn confirm_file_action(&mut self, cx: &mut Context<Self>) {
+        let Some(profile) = self
+            .selected_profile_id
+            .as_ref()
+            .and_then(|id| self.profiles.iter().find(|profile| profile.id == *id))
+            .cloned()
+        else {
+            return;
+        };
+        let Some(action) = self.file_action.clone() else {
+            return;
+        };
+        let result = match action {
+            FileAction::Rename(entry) => sftp::rename_entry(
+                &profile,
+                &entry.path,
+                &self.file_action_name,
+                &self.known_hosts_file,
+            ),
+            FileAction::Delete(entry) => {
+                sftp::delete_entry(&profile, &entry.path, entry.is_dir, &self.known_hosts_file)
+            }
+        };
+        match result {
+            Ok(()) => {
+                self.file_action = None;
+                self.load_directory(self.remote_path.clone(), cx);
+            }
+            Err(error) => {
+                self.notice = Some(error);
+                cx.notify();
+            }
+        }
+    }
+
+    fn cancel_file_action(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+        self.file_action = None;
+        self.file_action_name.clear();
+        cx.notify();
+    }
+
     fn load_directory(&mut self, path: String, cx: &mut Context<Self>) {
+        self.context_menu = None;
         let Some(profile) = self
             .selected_profile_id
             .as_ref()
@@ -385,6 +549,7 @@ impl TraceDeckGpui {
             Ok(file) => {
                 self.active_log_path = Some(file.path.clone());
                 self.log_content = normalize_newlines(file.content);
+                self.log_scroll.scroll_to_bottom();
                 let sender = self.stream_sender.clone();
                 match logs::start_tail_stream(
                     &profile,
@@ -527,10 +692,27 @@ impl TraceDeckGpui {
         cx.notify();
     }
 
+    fn clear_terminal(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(terminal_id) = self.active_terminal_id
+            && let Some(tab) = self
+                .terminal_tabs
+                .iter_mut()
+                .find(|tab| tab.terminal_id == terminal_id)
+        {
+            tab.parser = vt100::Parser::new(
+                NonZeroU16::new(30).expect("30 is non-zero"),
+                NonZeroU16::new(120).expect("120 is non-zero"),
+                5_000,
+            );
+            cx.notify();
+        }
+    }
+
     fn receive_stream_event(&mut self, event: StreamEvent, cx: &mut Context<Self>) {
         match event {
             StreamEvent::Tail(chunk) if Some(chunk.stream_id) == self.tail_stream_id => {
                 self.log_content.push_str(&normalize_newlines(chunk.chunk));
+                self.log_scroll.scroll_to_bottom();
                 const MAX_LOG_CHARACTERS: usize = 100_000;
                 if self.log_content.chars().count() > MAX_LOG_CHARACTERS {
                     self.log_content = self
@@ -723,6 +905,7 @@ impl TraceDeckGpui {
             )
             .children(matching_profiles.iter().enumerate().map(|(index, profile)| {
                 let profile_id = profile.id.clone();
+                let delete_profile_id = profile.id.clone();
                 let active = self.selected_profile_id.as_deref() == Some(profile.id.as_str());
                 div()
                     .id(("profile", index))
@@ -735,7 +918,11 @@ impl TraceDeckGpui {
                     .bg(if active { rgb(0x1d4b43) } else { rgb(PANEL_BACKGROUND) })
                     .p(px(12.0))
                     .hover(|style| style.bg(rgb(0x263849)))
-                    .child(div().text_sm().text_color(gpui::white()).child(profile.name.clone()))
+                    .child(
+                        div().flex().items_center().justify_between()
+                            .child(div().text_sm().text_color(gpui::white()).child(profile.name.clone()))
+                            .child(div().id(("delete-profile", index)).cursor_pointer().px(px(4.0)).text_color(rgb(MUTED_TEXT)).hover(|style| style.text_color(rgb(0xff8f8f))).child("×").on_click(cx.listener(move |this, event, window, cx| { cx.stop_propagation(); this.delete_profile(delete_profile_id.clone(), event, window, cx) }))),
+                    )
                     .child(
                         div()
                             .mt(px(4.0))
@@ -793,9 +980,11 @@ impl TraceDeckGpui {
                             .border_1()
                             .border_color(rgb(ACCENT))
                             .p(px(12.0))
-                            .text_sm()
-                            .text_color(gpui::white())
-                            .child(profile.name.clone())
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .child(div().text_sm().text_color(gpui::white()).child(profile.name.clone()))
+                            .child(div().id("close-session").cursor_pointer().px(px(4.0)).text_color(rgb(MUTED_TEXT)).hover(|style| style.text_color(gpui::white())).child("×").on_click(cx.listener(Self::close_session)))
                     }),
             )
             .child(div().flex_1())
@@ -932,6 +1121,7 @@ impl TraceDeckGpui {
         for (index, entry) in self.remote_entries.iter().enumerate() {
             let entry_path = entry.path.clone();
             let entry_name = entry.name.clone();
+            let entry_for_context = entry.clone();
             let details = entry.details.clone();
             let is_directory = entry.is_dir;
             let row = div()
@@ -944,6 +1134,12 @@ impl TraceDeckGpui {
                 .px(px(18.0))
                 .py(px(10.0))
                 .text_sm()
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |this, event, window, cx| {
+                        this.open_entry_context(entry_for_context.clone(), event, window, cx)
+                    }),
+                )
                 .hover(|style| style.bg(rgb(0x1c2935)))
                 .child(entry_icon(is_directory))
                 .child(div().text_color(gpui::white()).child(entry_name))
@@ -969,7 +1165,6 @@ impl TraceDeckGpui {
                     )))
                 };
         }
-
         div()
             .flex_1()
             .min_h_0()
@@ -1213,17 +1408,36 @@ impl TraceDeckGpui {
                     .child(div().text_sm().text_color(rgb(MUTED_TEXT)).child(title))
                     .child(
                         div()
-                            .id("open-terminal")
-                            .cursor_pointer()
-                            .rounded_md()
-                            .bg(rgb(0x267f67))
-                            .px(px(10.0))
-                            .py(px(6.0))
-                            .text_sm()
-                            .text_color(gpui::white())
-                            .hover(|style| style.bg(rgb(ACCENT)))
-                            .child("+ 터미널")
-                            .on_click(cx.listener(Self::open_terminal)),
+                            .flex()
+                            .gap(px(8.0))
+                            .child(
+                                div()
+                                    .id("clear-terminal")
+                                    .cursor_pointer()
+                                    .rounded_md()
+                                    .border_1()
+                                    .border_color(rgb(0x40566b))
+                                    .px(px(10.0))
+                                    .py(px(6.0))
+                                    .text_sm()
+                                    .hover(|style| style.bg(rgb(0x263849)))
+                                    .child("출력 지우기")
+                                    .on_click(cx.listener(Self::clear_terminal)),
+                            )
+                            .child(
+                                div()
+                                    .id("open-terminal")
+                                    .cursor_pointer()
+                                    .rounded_md()
+                                    .bg(rgb(0x267f67))
+                                    .px(px(10.0))
+                                    .py(px(6.0))
+                                    .text_sm()
+                                    .text_color(gpui::white())
+                                    .hover(|style| style.bg(rgb(ACCENT)))
+                                    .child("+ 터미널")
+                                    .on_click(cx.listener(Self::open_terminal)),
+                            ),
                     ),
             )
             .child(
@@ -1248,6 +1462,165 @@ impl TraceDeckGpui {
                             .child(content),
                     )
                     .child(self.scrollbar_thumb("terminal", &self.terminal_scroll)),
+            )
+    }
+
+    fn file_action_dialog(&self, cx: &mut Context<Self>) -> Div {
+        let action = self
+            .file_action
+            .as_ref()
+            .expect("dialog requires an action");
+        let (title, needs_name, confirm_label) = match action {
+            FileAction::Rename(_) => ("이름 변경", true, "변경"),
+            FileAction::Delete(_) => ("삭제 확인", false, "삭제"),
+        };
+        let description = match action {
+            FileAction::Delete(entry) => format!(
+                "‘{}’을(를) 삭제합니다. 이 작업은 되돌릴 수 없습니다.",
+                entry.name
+            ),
+            _ => "이름에는 경로 구분자(/, \\)를 사용할 수 없습니다.".to_owned(),
+        };
+        div()
+            .absolute()
+            .inset_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .bg(gpui::black().opacity(0.7))
+            .child(
+                div()
+                    .w(px(420.0))
+                    .rounded_lg()
+                    .bg(rgb(PANEL_BACKGROUND))
+                    .border_1()
+                    .border_color(rgb(0x40566b))
+                    .p(px(22.0))
+                    .flex()
+                    .flex_col()
+                    .gap(px(16.0))
+                    .track_focus(&self.file_action_focus)
+                    .on_key_down(cx.listener(Self::edit_file_action))
+                    .child(
+                        div()
+                            .text_lg()
+                            .font_weight(gpui::FontWeight::BOLD)
+                            .child(title),
+                    )
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(rgb(MUTED_TEXT))
+                            .child(description),
+                    )
+                    .when(needs_name, |dialog| {
+                        dialog.child(
+                            div()
+                                .id("file-action-name")
+                                .cursor_text()
+                                .rounded_md()
+                                .border_1()
+                                .border_color(rgb(ACCENT))
+                                .px(px(10.0))
+                                .py(px(9.0))
+                                .text_sm()
+                                .child(if self.file_action_name.is_empty() {
+                                    "이름 입력".to_owned()
+                                } else {
+                                    self.file_action_name.clone()
+                                }),
+                        )
+                    })
+                    .child(
+                        div()
+                            .flex()
+                            .justify_end()
+                            .gap(px(10.0))
+                            .child(
+                                div()
+                                    .id("cancel-file-action")
+                                    .cursor_pointer()
+                                    .rounded_md()
+                                    .border_1()
+                                    .border_color(rgb(0x40566b))
+                                    .px(px(14.0))
+                                    .py(px(8.0))
+                                    .text_sm()
+                                    .child("취소")
+                                    .on_click(cx.listener(Self::cancel_file_action)),
+                            )
+                            .child(
+                                div()
+                                    .id("confirm-file-action")
+                                    .cursor_pointer()
+                                    .rounded_md()
+                                    .bg(if matches!(action, FileAction::Delete(_)) {
+                                        rgb(0xa64242)
+                                    } else {
+                                        rgb(0x267f67)
+                                    })
+                                    .px(px(14.0))
+                                    .py(px(8.0))
+                                    .text_sm()
+                                    .text_color(gpui::white())
+                                    .child(confirm_label)
+                                    .on_click(
+                                        cx.listener(|this, _, _, cx| this.confirm_file_action(cx)),
+                                    ),
+                            ),
+                    ),
+            )
+    }
+
+    fn context_menu(&self, cx: &mut Context<Self>) -> Div {
+        let menu = self.context_menu.as_ref().expect("menu exists");
+        let rename_entry = menu.entry.clone();
+        let delete_entry = menu.entry.clone();
+        div()
+            .absolute()
+            .left(px(menu.x))
+            .top(px(menu.y))
+            .w(px(138.0))
+            .rounded_md()
+            .border_1()
+            .border_color(rgb(0x40566b))
+            .bg(rgb(0x1a2631))
+            .p(px(5.0))
+            .flex()
+            .flex_col()
+            .gap(px(2.0))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|_, _, _, cx| cx.stop_propagation()),
+            )
+            .child(
+                div()
+                    .id("context-menu-rename")
+                    .cursor_pointer()
+                    .rounded_sm()
+                    .px(px(10.0))
+                    .py(px(8.0))
+                    .text_sm()
+                    .hover(|style| style.bg(rgb(0x294052)))
+                    .child("이름 변경")
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.begin_file_action(FileAction::Rename(rename_entry.clone()), window, cx)
+                    })),
+            )
+            .child(
+                div()
+                    .id("context-menu-delete")
+                    .cursor_pointer()
+                    .rounded_sm()
+                    .px(px(10.0))
+                    .py(px(8.0))
+                    .text_sm()
+                    .text_color(rgb(0xff8f8f))
+                    .hover(|style| style.bg(rgb(0x41272a)))
+                    .child("삭제")
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.begin_file_action(FileAction::Delete(delete_entry.clone()), window, cx)
+                    })),
             )
     }
 
@@ -1431,12 +1804,14 @@ impl TraceDeckGpui {
 impl Render for TraceDeckGpui {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let root = div()
+            .id("app-root")
             .size_full()
             .relative()
             .flex()
             .flex_col()
             .bg(rgb(APP_BACKGROUND))
             .text_color(rgb(0xe5edf5))
+            .on_mouse_down(MouseButton::Left, cx.listener(Self::dismiss_context_menu))
             .child(self.header(cx))
             .child(
                 div()
@@ -1447,8 +1822,19 @@ impl Render for TraceDeckGpui {
                     .child(self.workspace(cx)),
             );
 
-        if self.show_new_session_dialog {
+        let root = if self.show_new_session_dialog {
             root.child(self.new_session_dialog(cx))
+        } else {
+            root
+        };
+
+        let root = if self.file_action.is_some() {
+            root.child(self.file_action_dialog(cx))
+        } else {
+            root
+        };
+        if self.context_menu.is_some() {
+            root.child(self.context_menu(cx))
         } else {
             root
         }
@@ -1779,6 +2165,7 @@ fn main() {
                 let terminal_focus = cx.focus_handle();
                 let session_form_focus = cx.focus_handle();
                 let server_search_focus = cx.focus_handle();
+                let file_action_focus = cx.focus_handle();
                 let view = cx.new(|_| TraceDeckGpui {
                     core_status: initial_state.core_status.clone(),
                     profiles: initial_state.profiles.clone(),
@@ -1812,6 +2199,10 @@ fn main() {
                     active_bottom_panel: BottomPanel::Log,
                     bottom_panel_height: 254.0,
                     show_new_session_dialog: false,
+                    file_action: None,
+                    file_action_name: String::new(),
+                    file_action_focus,
+                    context_menu: None,
                 });
                 let event_view = view.clone();
                 window

@@ -30,9 +30,10 @@ struct TraceDeckGpui {
     known_hosts_file: std::path::PathBuf,
     profile_file: std::path::PathBuf,
     notice: Option<String>,
-    active_log_path: Option<String>,
-    log_content: String,
-    tail_stream_id: Option<u64>,
+    log_tabs: Vec<LogTab>,
+    active_log_id: Option<u64>,
+    split_log_ids: Vec<u64>,
+    next_log_id: u64,
     system_stream_id: Option<u64>,
     remote_status: Option<RemoteSystemStatus>,
     tail_streams: Arc<logs::TailStreams>,
@@ -70,6 +71,13 @@ struct TerminalTab {
     terminal_id: u64,
     title: String,
     parser: vt100::Parser,
+}
+
+struct LogTab {
+    id: u64,
+    path: String,
+    content: String,
+    tail_stream_id: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -352,8 +360,9 @@ impl TraceDeckGpui {
         self.stop_streams();
         self.context_menu = None;
         self.selected_profile_id = Some(profile_id);
-        self.active_log_path = None;
-        self.log_content.clear();
+        self.log_tabs.clear();
+        self.active_log_id = None;
+        self.split_log_ids.clear();
         self.remote_status = None;
         self.load_directory("/".to_owned(), cx);
         self.start_system_status_stream();
@@ -367,8 +376,9 @@ impl TraceDeckGpui {
         self.stop_streams();
         self.selected_profile_id = None;
         self.remote_entries.clear();
-        self.active_log_path = None;
-        self.log_content.clear();
+        self.log_tabs.clear();
+        self.active_log_id = None;
+        self.split_log_ids.clear();
         self.remote_status = None;
         self.context_menu = None;
         cx.notify();
@@ -544,14 +554,17 @@ impl TraceDeckGpui {
             return;
         };
 
-        self.stop_tail_stream();
+        if let Some(existing) = self.log_tabs.iter().find(|tab| tab.path == path) {
+            self.active_log_id = Some(existing.id);
+            self.active_bottom_panel = BottomPanel::Log;
+            cx.notify();
+            return;
+        }
+
         match logs::read_recent_file(&profile, path.clone(), &self.known_hosts_file) {
             Ok(file) => {
-                self.active_log_path = Some(file.path.clone());
-                self.log_content = normalize_newlines(file.content);
-                self.log_scroll.scroll_to_bottom();
                 let sender = self.stream_sender.clone();
-                match logs::start_tail_stream(
+                let tail_stream_id = match logs::start_tail_stream(
                     &profile,
                     &file.path,
                     &self.known_hosts_file,
@@ -560,9 +573,23 @@ impl TraceDeckGpui {
                         let _ = sender.try_send(StreamEvent::Tail(chunk));
                     },
                 ) {
-                    Ok(stream_id) => self.tail_stream_id = Some(stream_id),
-                    Err(error) => self.notice = Some(error),
-                }
+                    Ok(stream_id) => Some(stream_id),
+                    Err(error) => {
+                        self.notice = Some(error);
+                        None
+                    }
+                };
+                let id = self.next_log_id;
+                self.next_log_id += 1;
+                self.log_tabs.push(LogTab {
+                    id,
+                    path: file.path,
+                    content: normalize_newlines(file.content),
+                    tail_stream_id,
+                });
+                self.active_log_id = Some(id);
+                self.active_bottom_panel = BottomPanel::Log;
+                self.log_scroll.scroll_to_bottom();
             }
             Err(error) => self.notice = Some(error),
         }
@@ -592,14 +619,55 @@ impl TraceDeckGpui {
         }
     }
 
-    fn stop_tail_stream(&mut self) {
-        if let Some(stream_id) = self.tail_stream_id.take() {
-            let _ = logs::stop_tail_stream(stream_id, &self.tail_streams);
+    fn select_log(&mut self, log_id: u64, _: &mut Window, cx: &mut Context<Self>) {
+        self.active_log_id = Some(log_id);
+        self.active_bottom_panel = BottomPanel::Log;
+        self.log_scroll.scroll_to_bottom();
+        cx.notify();
+    }
+
+    fn close_log(&mut self, log_id: u64, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(index) = self.log_tabs.iter().position(|tab| tab.id == log_id) {
+            let tab = self.log_tabs.remove(index);
+            if let Some(stream_id) = tab.tail_stream_id {
+                let _ = logs::stop_tail_stream(stream_id, &self.tail_streams);
+            }
+        }
+        self.split_log_ids.retain(|id| *id != log_id);
+        if self.active_log_id == Some(log_id) {
+            self.active_log_id = self.log_tabs.last().map(|tab| tab.id);
+        }
+        if self.split_log_ids.len() != 2 {
+            self.split_log_ids.clear();
+        }
+        cx.notify();
+    }
+
+    fn toggle_log_split(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if self.split_log_ids.len() == 2 {
+            self.split_log_ids.clear();
+        } else if let Some(active_log_id) = self.active_log_id
+            && let Some(other) = self
+                .log_tabs
+                .iter()
+                .rev()
+                .find(|tab| tab.id != active_log_id)
+        {
+            self.split_log_ids = vec![active_log_id, other.id];
+        }
+        cx.notify();
+    }
+
+    fn stop_all_tail_streams(&mut self) {
+        for tab in self.log_tabs.drain(..) {
+            if let Some(stream_id) = tab.tail_stream_id {
+                let _ = logs::stop_tail_stream(stream_id, &self.tail_streams);
+            }
         }
     }
 
     fn stop_streams(&mut self) {
-        self.stop_tail_stream();
+        self.stop_all_tail_streams();
         if let Some(stream_id) = self.system_stream_id.take() {
             let _ = system::stop_remote_system_stream(stream_id, &self.system_streams);
         }
@@ -710,18 +778,30 @@ impl TraceDeckGpui {
 
     fn receive_stream_event(&mut self, event: StreamEvent, cx: &mut Context<Self>) {
         match event {
-            StreamEvent::Tail(chunk) if Some(chunk.stream_id) == self.tail_stream_id => {
-                self.log_content.push_str(&normalize_newlines(chunk.chunk));
-                self.log_scroll.scroll_to_bottom();
-                const MAX_LOG_CHARACTERS: usize = 100_000;
-                if self.log_content.chars().count() > MAX_LOG_CHARACTERS {
-                    self.log_content = self
-                        .log_content
-                        .chars()
-                        .skip(self.log_content.chars().count() - MAX_LOG_CHARACTERS)
-                        .collect();
+            StreamEvent::Tail(chunk) => {
+                let mut should_scroll = false;
+                if let Some(tab) = self
+                    .log_tabs
+                    .iter_mut()
+                    .find(|tab| tab.tail_stream_id == Some(chunk.stream_id))
+                {
+                    tab.content.push_str(&normalize_newlines(chunk.chunk));
+                    const MAX_LOG_CHARACTERS: usize = 100_000;
+                    let char_count = tab.content.chars().count();
+                    if char_count > MAX_LOG_CHARACTERS {
+                        tab.content = tab
+                            .content
+                            .chars()
+                            .skip(char_count - MAX_LOG_CHARACTERS)
+                            .collect();
+                    }
+                    should_scroll =
+                        self.active_log_id == Some(tab.id) || self.split_log_ids.contains(&tab.id);
                 }
-                cx.notify();
+                if should_scroll {
+                    self.log_scroll.scroll_to_bottom();
+                    cx.notify();
+                }
             }
             StreamEvent::System(chunk) if Some(chunk.stream_id) == self.system_stream_id => {
                 self.remote_status = Some(chunk.status);
@@ -1335,15 +1415,14 @@ impl TraceDeckGpui {
     }
 
     fn log_panel(&self, cx: &mut Context<Self>) -> Div {
-        let title = self.active_log_path.as_deref().map_or(
-            "파일을 선택하면 최근 로그와 실시간 tail을 표시합니다.",
-            |path| path,
-        );
-        let display = if self.log_content.is_empty() {
-            LogDisplay::plain("로그 내용이 없습니다.".to_owned())
-        } else {
-            parse_log_content(&self.log_content)
-        };
+        let active_tab = self
+            .active_log_id
+            .and_then(|id| self.log_tabs.iter().find(|tab| tab.id == id));
+        let split_tabs: Vec<&LogTab> = self
+            .split_log_ids
+            .iter()
+            .filter_map(|id| self.log_tabs.iter().find(|tab| tab.id == *id))
+            .collect();
         div()
             .flex_1()
             .min_h_0()
@@ -1355,42 +1434,165 @@ impl TraceDeckGpui {
             .child(
                 div()
                     .flex_shrink_0()
+                    .flex()
+                    .items_center()
                     .border_b_1()
                     .border_color(rgb(BORDER))
-                    .px(px(14.0))
-                    .py(px(8.0))
-                    .text_sm()
+                    .px(px(8.0))
+                    .py(px(5.0))
+                    .gap(px(4.0))
+                    .children(self.log_tabs.iter().enumerate().map(|(index, tab)| {
+                        let log_id = tab.id;
+                        let active = self.active_log_id == Some(log_id);
+                        let label = file_name(&tab.path);
+                        div()
+                            .id(("log-tab", index))
+                            .flex()
+                            .items_center()
+                            .gap(px(6.0))
+                            .rounded_sm()
+                            .bg(if active { rgb(0x263b4b) } else { rgb(0x0d141b) })
+                            .px(px(8.0))
+                            .py(px(5.0))
+                            .text_xs()
+                            .text_color(if active {
+                                rgb(0xf1f7fb)
+                            } else {
+                                rgb(MUTED_TEXT)
+                            })
+                            .hover(|style| style.bg(rgb(0x263746)))
+                            .child(
+                                div()
+                                    .id(("select-log", index))
+                                    .cursor_pointer()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(6.0))
+                                    .child("▣")
+                                    .child(label)
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        this.select_log(log_id, window, cx);
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .id(("close-log", index))
+                                    .cursor_pointer()
+                                    .px(px(3.0))
+                                    .child("×")
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        this.close_log(log_id, window, cx);
+                                    })),
+                            )
+                    }))
+                    .children((self.log_tabs.len() >= 2).then(|| {
+                        let split_open = split_tabs.len() == 2;
+                        div()
+                            .id("toggle-log-split")
+                            .cursor_pointer()
+                            .ml_auto()
+                            .rounded_sm()
+                            .bg(if split_open {
+                                rgb(0x174b3b)
+                            } else {
+                                rgb(0x1c2935)
+                            })
+                            .px(px(8.0))
+                            .py(px(5.0))
+                            .text_xs()
+                            .text_color(if split_open {
+                                rgb(0xa6ffce)
+                            } else {
+                                rgb(MUTED_TEXT)
+                            })
+                            .child(if split_open {
+                                "분할 닫기"
+                            } else {
+                                "분할 보기"
+                            })
+                            .on_click(cx.listener(Self::toggle_log_split))
+                    })),
+            )
+            .child(if split_tabs.len() == 2 {
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .child(self.log_split_preview(split_tabs[0], 1))
+                    .child(div().w(px(1.0)).flex_shrink_0().bg(rgb(BORDER)))
+                    .child(self.log_split_preview(split_tabs[1], 2))
+            } else {
+                self.log_active_preview(active_tab, cx)
+            })
+    }
+
+    fn log_active_preview(&self, tab: Option<&LogTab>, cx: &mut Context<Self>) -> Div {
+        let display = tab.map_or_else(
+            || {
+                LogDisplay::plain(
+                    "파일을 선택하면 최근 로그와 실시간 tail을 표시합니다.".to_owned(),
+                )
+            },
+            |tab| {
+                if tab.content.is_empty() {
+                    LogDisplay::plain("로그 내용이 없습니다.".to_owned())
+                } else {
+                    parse_log_content(&tab.content)
+                }
+            },
+        );
+        div()
+            .relative()
+            .flex_1()
+            .min_h_0()
+            .child(
+                div()
+                    .id("log-content")
+                    .size_full()
+                    .overflow_scroll()
+                    .track_scroll(&self.log_scroll)
+                    .on_scroll_wheel(cx.listener(Self::refresh_scrollbar))
+                    .p(px(12.0))
+                    .text_size(px(12.5))
+                    .text_color(rgb(0xc8d7e5))
+                    .child(styled_log_text(display)),
+            )
+            .child(self.scrollbar_thumb("log", &self.log_scroll))
+    }
+
+    fn log_split_preview(&self, tab: &LogTab, pane: u64) -> Div {
+        let display = if tab.content.is_empty() {
+            LogDisplay::plain("로그 내용이 없습니다.".to_owned())
+        } else {
+            parse_log_content(&tab.content)
+        };
+        div()
+            .flex_1()
+            .min_w_0()
+            .min_h_0()
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .border_b_1()
+                    .border_color(rgb(BORDER))
+                    .px(px(12.0))
+                    .py(px(6.0))
+                    .text_xs()
                     .text_color(rgb(MUTED_TEXT))
-                    .child(title.to_owned()),
+                    .child(tab.path.clone()),
             )
             .child(
                 div()
-                    .relative()
+                    .id(("split-log-content", pane))
                     .flex_1()
                     .min_h_0()
-                    .child(
-                        div()
-                            .id("log-content")
-                            .size_full()
-                            .overflow_scroll()
-                            .track_scroll(&self.log_scroll)
-                            .on_scroll_wheel(cx.listener(Self::refresh_scrollbar))
-                            .p(px(12.0))
-                            .text_size(px(12.5))
-                            .text_color(rgb(0xc8d7e5))
-                            .child(StyledText::new(display.text).with_highlights(
-                                display.highlights.into_iter().map(|highlight| {
-                                    (
-                                        highlight.range,
-                                        HighlightStyle {
-                                            color: Some(rgb(highlight.color).into()),
-                                            ..Default::default()
-                                        },
-                                    )
-                                }),
-                            )),
-                    )
-                    .child(self.scrollbar_thumb("log", &self.log_scroll)),
+                    .overflow_scroll()
+                    .p(px(12.0))
+                    .text_size(px(12.5))
+                    .text_color(rgb(0xc8d7e5))
+                    .child(styled_log_text(display)),
             )
     }
 
@@ -2020,6 +2222,22 @@ fn normalize_newlines(content: String) -> String {
     content.replace("\r\n", "\n").replace('\r', "\n")
 }
 
+fn file_name(path: &str) -> String {
+    path.rsplit('/').next().unwrap_or(path).to_owned()
+}
+
+fn styled_log_text(display: LogDisplay) -> StyledText {
+    StyledText::new(display.text).with_highlights(display.highlights.into_iter().map(|highlight| {
+        (
+            highlight.range,
+            HighlightStyle {
+                color: Some(rgb(highlight.color).into()),
+                ..Default::default()
+            },
+        )
+    }))
+}
+
 fn parse_log_content(content: &str) -> LogDisplay {
     let bytes = content.as_bytes();
     let mut text = String::with_capacity(content.len());
@@ -2248,9 +2466,10 @@ fn main() {
                     known_hosts_file: initial_state.known_hosts_file.clone(),
                     profile_file: initial_state.profile_file.clone(),
                     notice: None,
-                    active_log_path: None,
-                    log_content: String::new(),
-                    tail_stream_id: None,
+                    log_tabs: Vec::new(),
+                    active_log_id: None,
+                    split_log_ids: Vec::new(),
+                    next_log_id: 1,
                     system_stream_id: None,
                     remote_status: None,
                     tail_streams: Arc::new(logs::TailStreams::new()),

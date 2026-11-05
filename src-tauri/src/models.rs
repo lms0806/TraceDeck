@@ -1,21 +1,12 @@
 use serde::Serialize;
 
-pub(crate) use trace_deck_core::ConnectionProfile;
+pub(crate) use trace_deck_core::{ConnectionProfile, RemoteEntry};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ConnectionCheck {
     pub(crate) connected: bool,
     pub(crate) message: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RemoteEntry {
-    pub(crate) name: String,
-    pub(crate) path: String,
-    pub(crate) is_dir: bool,
-    pub(crate) details: String,
 }
 
 #[derive(Serialize)]

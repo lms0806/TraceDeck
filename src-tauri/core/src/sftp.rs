@@ -1,11 +1,25 @@
 use std::{io::Write, path::Path, process::Stdio};
 
-use crate::models::{ConnectionProfile, RemoteEntry};
-use trace_deck_core::ssh::{
-    escape_remote_shell_path, reject_password_auth, sftp_command, ssh_command, validate_remote_path,
+use serde::Serialize;
+
+use crate::{
+    ConnectionProfile,
+    ssh::{
+        escape_remote_shell_path, reject_password_auth, sftp_command, ssh_command,
+        validate_remote_path,
+    },
 };
 
-pub(crate) fn list_directory(
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub details: String,
+}
+
+pub fn list_directory(
     profile: &ConnectionProfile,
     path: &str,
     known_hosts_file: &Path,
@@ -32,12 +46,10 @@ pub(crate) fn list_directory(
         .wait_with_output()
         .map_err(|error| error.to_string())?;
     if !output.status.success() {
-        let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(if error.is_empty() {
-            "원격 디렉터리를 읽지 못했습니다.".into()
-        } else {
-            error
-        });
+        return Err(command_error(
+            &output.stderr,
+            "원격 디렉터리를 읽지 못했습니다.",
+        ));
     }
     Ok(parse_listing(
         &String::from_utf8_lossy(&output.stdout),
@@ -45,7 +57,7 @@ pub(crate) fn list_directory(
     ))
 }
 
-pub(crate) fn delete_entry(
+pub fn delete_entry(
     profile: &ConnectionProfile,
     path: &str,
     is_directory: bool,
@@ -62,7 +74,7 @@ pub(crate) fn delete_entry(
     )
 }
 
-pub(crate) fn rename_entry(
+pub fn rename_entry(
     profile: &ConnectionProfile,
     path: &str,
     new_name: &str,
@@ -84,7 +96,7 @@ pub(crate) fn rename_entry(
     )
 }
 
-pub(crate) fn create_directory(
+pub fn create_directory(
     profile: &ConnectionProfile,
     parent_path: &str,
     name: &str,
@@ -102,7 +114,7 @@ pub(crate) fn create_directory(
     )
 }
 
-pub(crate) fn create_empty_file(
+pub fn create_empty_file(
     profile: &ConnectionProfile,
     parent_path: &str,
     name: &str,
@@ -120,12 +132,10 @@ pub(crate) fn create_empty_file(
     if output.status.success() {
         Ok(())
     } else {
-        let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        Err(if error.is_empty() {
-            "원격 파일을 생성하지 못했습니다.".into()
-        } else {
-            error
-        })
+        Err(command_error(
+            &output.stderr,
+            "원격 파일을 생성하지 못했습니다.",
+        ))
     }
 }
 
@@ -155,12 +165,16 @@ fn run_sftp_batch(
     if output.status.success() {
         Ok(())
     } else {
-        let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        Err(if error.is_empty() {
-            fallback_message.into()
-        } else {
-            error
-        })
+        Err(command_error(&output.stderr, fallback_message))
+    }
+}
+
+fn command_error(stderr: &[u8], fallback_message: &str) -> String {
+    let error = String::from_utf8_lossy(stderr).trim().to_string();
+    if error.is_empty() {
+        fallback_message.to_string()
+    } else {
+        error
     }
 }
 
@@ -188,7 +202,7 @@ fn child_path(parent_path: &str, name: &str) -> String {
     }
 }
 
-pub(crate) fn parse_listing(output: &str, requested_path: &str) -> Vec<RemoteEntry> {
+pub fn parse_listing(output: &str, requested_path: &str) -> Vec<RemoteEntry> {
     let base = if requested_path == "/" {
         "/"
     } else {

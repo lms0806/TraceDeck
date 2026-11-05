@@ -2,7 +2,6 @@ mod logs;
 mod models;
 mod profiles;
 mod remote;
-mod sftp;
 mod state;
 mod system;
 mod terminal;

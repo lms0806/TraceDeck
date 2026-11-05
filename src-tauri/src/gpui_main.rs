@@ -1,13 +1,15 @@
+use std::num::NonZeroU16;
 use std::sync::Arc;
 
 use async_channel::Sender;
 use gpui::{
-    App, Application, Bounds, Context, Div, IntoElement, Render, StatefulInteractiveElement,
-    Window, WindowBounds, WindowOptions, div, prelude::*, px, rgb, size,
+    App, Application, Bounds, Context, Div, FocusHandle, IntoElement, Render,
+    StatefulInteractiveElement, Window, WindowBounds, WindowOptions, div, prelude::*, px, rgb,
+    size,
 };
 use trace_deck_core::{
     AppPaths, ConnectionProfile, ProfileStore, RemoteEntry, RemoteSystemStatus, SystemStatusChunk,
-    TailChunk, logs, sftp, system,
+    TailChunk, TerminalChunk, logs, sftp, system, terminal,
 };
 
 const WINDOW_WIDTH: f32 = 1280.0;
@@ -34,12 +36,23 @@ struct TraceDeckGpui {
     tail_streams: Arc<logs::TailStreams>,
     system_streams: Arc<system::SystemStreams>,
     stream_sender: Sender<StreamEvent>,
+    terminal_sessions: terminal::TerminalSessions,
+    terminal_tabs: Vec<TerminalTab>,
+    active_terminal_id: Option<u64>,
+    terminal_focus: FocusHandle,
     show_new_session_dialog: bool,
 }
 
 enum StreamEvent {
     Tail(TailChunk),
     System(SystemStatusChunk),
+    Terminal(TerminalChunk),
+}
+
+struct TerminalTab {
+    terminal_id: u64,
+    title: String,
+    parser: vt100::Parser,
 }
 
 impl TraceDeckGpui {
@@ -162,6 +175,91 @@ impl TraceDeckGpui {
         }
     }
 
+    fn open_terminal(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+        let Some(profile) = self
+            .selected_profile_id
+            .as_ref()
+            .and_then(|id| self.profiles.iter().find(|profile| profile.id == *id))
+            .cloned()
+        else {
+            self.notice = Some("먼저 저장 세션을 선택하세요.".to_owned());
+            cx.notify();
+            return;
+        };
+
+        let sender = self.stream_sender.clone();
+        match terminal::start_terminal(
+            &profile,
+            &self.known_hosts_file,
+            &self.terminal_sessions,
+            move |chunk| {
+                let _ = sender.try_send(StreamEvent::Terminal(chunk));
+            },
+        ) {
+            Ok(terminal_id) => {
+                self.terminal_tabs.push(TerminalTab {
+                    terminal_id,
+                    title: format!("{} 터미널", profile.name),
+                    parser: vt100::Parser::new(
+                        NonZeroU16::new(30).expect("30 is non-zero"),
+                        NonZeroU16::new(120).expect("120 is non-zero"),
+                        5_000,
+                    ),
+                });
+                self.active_terminal_id = Some(terminal_id);
+            }
+            Err(error) => self.notice = Some(error),
+        }
+        cx.notify();
+    }
+
+    fn send_terminal_key(
+        &mut self,
+        event: &gpui::KeyDownEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(terminal_id) = self.active_terminal_id else {
+            return;
+        };
+        let key = event.keystroke.key.as_str();
+        let input = match key {
+            "enter" => "\r".to_owned(),
+            "backspace" => "\u{7f}".to_owned(),
+            "tab" => "\t".to_owned(),
+            "escape" => "\u{1b}".to_owned(),
+            "up" => "\u{1b}[A".to_owned(),
+            "down" => "\u{1b}[B".to_owned(),
+            "right" => "\u{1b}[C".to_owned(),
+            "left" => "\u{1b}[D".to_owned(),
+            value if value.chars().count() == 1 => value.to_owned(),
+            _ => return,
+        };
+        if let Err(error) = terminal::write_terminal(terminal_id, input, &self.terminal_sessions) {
+            self.notice = Some(error);
+            cx.notify();
+        }
+    }
+
+    fn focus_terminal(&mut self, _: &gpui::ClickEvent, window: &mut Window, _: &mut Context<Self>) {
+        window.focus(&self.terminal_focus);
+    }
+
+    fn select_terminal(&mut self, terminal_id: u64, _: &mut Window, cx: &mut Context<Self>) {
+        self.active_terminal_id = Some(terminal_id);
+        cx.notify();
+    }
+
+    fn close_terminal(&mut self, terminal_id: u64, _: &mut Window, cx: &mut Context<Self>) {
+        let _ = terminal::stop_terminal(terminal_id, &self.terminal_sessions);
+        self.terminal_tabs
+            .retain(|tab| tab.terminal_id != terminal_id);
+        if self.active_terminal_id == Some(terminal_id) {
+            self.active_terminal_id = self.terminal_tabs.last().map(|tab| tab.terminal_id);
+        }
+        cx.notify();
+    }
+
     fn receive_stream_event(&mut self, event: StreamEvent, cx: &mut Context<Self>) {
         match event {
             StreamEvent::Tail(chunk) if Some(chunk.stream_id) == self.tail_stream_id => {
@@ -179,6 +277,16 @@ impl TraceDeckGpui {
             StreamEvent::System(chunk) if Some(chunk.stream_id) == self.system_stream_id => {
                 self.remote_status = Some(chunk.status);
                 cx.notify();
+            }
+            StreamEvent::Terminal(chunk) => {
+                if let Some(tab) = self
+                    .terminal_tabs
+                    .iter_mut()
+                    .find(|tab| tab.terminal_id == chunk.terminal_id)
+                {
+                    tab.parser.process(chunk.chunk.as_bytes());
+                    cx.notify();
+                }
             }
             _ => {}
         }
@@ -226,6 +334,41 @@ impl TraceDeckGpui {
                             .child("SFTP FILE BROWSER"),
                     ),
             )
+            .children(self.terminal_tabs.iter().enumerate().map(|(index, tab)| {
+                let terminal_id = tab.terminal_id;
+                let active = self.active_terminal_id == Some(terminal_id);
+                div()
+                    .id(("terminal-tab", index))
+                    .cursor_pointer()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .border_b_1()
+                    .border_color(rgb(BORDER))
+                    .bg(if active { rgb(0x1c2935) } else { rgb(0x101820) })
+                    .px(px(12.0))
+                    .py(px(6.0))
+                    .text_xs()
+                    .text_color(if active {
+                        rgb(0xffffff)
+                    } else {
+                        rgb(MUTED_TEXT)
+                    })
+                    .child(tab.title.clone())
+                    .child(
+                        div()
+                            .id(("close-terminal", index))
+                            .cursor_pointer()
+                            .px(px(6.0))
+                            .child("×")
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.close_terminal(terminal_id, window, cx);
+                            })),
+                    )
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.select_terminal(terminal_id, window, cx);
+                    }))
+            }))
             .child(
                 div()
                     .id("new-session")
@@ -583,6 +726,7 @@ impl TraceDeckGpui {
             }))
             .child(entries)
             .child(self.log_panel())
+            .child(self.terminal_panel(cx))
     }
 
     fn log_panel(&self) -> Div {
@@ -622,6 +766,68 @@ impl TraceDeckGpui {
                     .p(px(12.0))
                     .text_xs()
                     .text_color(rgb(0xc8d7e5))
+                    .child(content),
+            )
+    }
+
+    fn terminal_panel(&self, cx: &mut Context<Self>) -> Div {
+        let active_tab = self
+            .active_terminal_id
+            .and_then(|id| self.terminal_tabs.iter().find(|tab| tab.terminal_id == id));
+        let title = active_tab.map_or_else(
+            || "터미널을 열어 SSH 명령을 입력하세요.".to_owned(),
+            |tab| tab.title.clone(),
+        );
+        let content = active_tab.map_or_else(
+            || "세션을 선택한 뒤 터미널 열기를 누르세요.".to_owned(),
+            |tab| tab.parser.screen().contents(),
+        );
+        div()
+            .h(px(220.0))
+            .flex_shrink_0()
+            .flex()
+            .flex_col()
+            .border_t_1()
+            .border_color(rgb(BORDER))
+            .bg(rgb(0x090d12))
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .border_b_1()
+                    .border_color(rgb(BORDER))
+                    .px(px(14.0))
+                    .py(px(8.0))
+                    .child(div().text_sm().text_color(rgb(MUTED_TEXT)).child(title))
+                    .child(
+                        div()
+                            .id("open-terminal")
+                            .cursor_pointer()
+                            .rounded_md()
+                            .bg(rgb(0x267f67))
+                            .px(px(10.0))
+                            .py(px(6.0))
+                            .text_sm()
+                            .text_color(gpui::white())
+                            .hover(|style| style.bg(rgb(ACCENT)))
+                            .child("+ 터미널")
+                            .on_click(cx.listener(Self::open_terminal)),
+                    ),
+            )
+            .child(
+                div()
+                    .id("terminal-content")
+                    .track_focus(&self.terminal_focus)
+                    .flex_1()
+                    .overflow_y_scroll()
+                    .cursor_text()
+                    .p(px(12.0))
+                    .text_xs()
+                    .text_color(rgb(0xd6e1ea))
+                    .on_click(cx.listener(Self::focus_terminal))
+                    .on_key_down(cx.listener(Self::send_terminal_key))
                     .child(content),
             )
     }
@@ -805,6 +1011,7 @@ fn main() {
                 ..Default::default()
             },
             |window, cx| {
+                let terminal_focus = cx.focus_handle();
                 let view = cx.new(|_| TraceDeckGpui {
                     core_status: initial_state.core_status.clone(),
                     profiles: initial_state.profiles.clone(),
@@ -821,6 +1028,10 @@ fn main() {
                     tail_streams: Arc::new(logs::TailStreams::new()),
                     system_streams: Arc::new(system::SystemStreams::new()),
                     stream_sender: stream_sender.clone(),
+                    terminal_sessions: terminal::TerminalSessions::new(),
+                    terminal_tabs: Vec::new(),
+                    active_terminal_id: None,
+                    terminal_focus,
                     show_new_session_dialog: false,
                 });
                 let event_view = view.clone();

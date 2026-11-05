@@ -3,7 +3,6 @@ mod models;
 mod profiles;
 mod remote;
 mod sftp;
-mod ssh_client;
 mod state;
 mod system;
 mod terminal;

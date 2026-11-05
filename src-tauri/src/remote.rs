@@ -4,10 +4,10 @@ use crate::{
     logs,
     models::{ConnectionCheck, ConnectionProfile, LogSource, RemoteEntry, RemoteFile},
     sftp,
-    ssh_client::{reject_password_auth, ssh_command},
     state::{AppState, SystemStreams, TailStreams, TerminalSessions},
     system,
 };
+use trace_deck_core::ssh::{reject_password_auth, ssh_command};
 
 #[tauri::command]
 pub(crate) fn check_ssh_connection(

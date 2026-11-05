@@ -1,27 +1,24 @@
 use std::{path::Path, process::Command};
 
-use crate::models::ConnectionProfile;
+use crate::ConnectionProfile;
 
 const STRICT_HOST_KEY_CHECKING: &str = "StrictHostKeyChecking=accept-new";
 
-pub(crate) fn validate_remote_path(path: &str) -> Result<(), String> {
+pub fn validate_remote_path(path: &str) -> Result<(), String> {
     if path.contains(['\r', '\n', '\0']) {
         return Err("유효하지 않은 원격 경로입니다.".into());
     }
     Ok(())
 }
 
-pub(crate) fn escape_remote_shell_path(path: &str) -> String {
+pub fn escape_remote_shell_path(path: &str) -> String {
     path.replace('\\', "\\\\")
         .replace('"', "\\\"")
         .replace('$', "\\$")
         .replace('`', "\\`")
 }
 
-pub(crate) fn reject_password_auth(
-    profile: &ConnectionProfile,
-    action: &str,
-) -> Result<(), String> {
+pub fn reject_password_auth(profile: &ConnectionProfile, action: &str) -> Result<(), String> {
     if profile.auth_kind == "password" {
         return Err(format!(
             "비밀번호 방식의 {action}은 아직 지원되지 않습니다."
@@ -30,11 +27,11 @@ pub(crate) fn reject_password_auth(
     Ok(())
 }
 
-pub(crate) fn destination(profile: &ConnectionProfile) -> String {
+pub fn destination(profile: &ConnectionProfile) -> String {
     format!("{}@{}", profile.username, profile.host)
 }
 
-pub(crate) fn append_ssh_auth_args(
+pub fn append_ssh_auth_args(
     command: &mut Command,
     profile: &ConnectionProfile,
     known_hosts_file: &Path,
@@ -50,16 +47,10 @@ pub(crate) fn append_ssh_auth_args(
         .arg(format!("UserKnownHostsFile={}", known_hosts_file.display()))
         .arg("-p")
         .arg(profile.port.to_string());
-    if profile.auth_kind == "privateKey" {
-        let Some(key_path) = profile.private_key_path.as_deref() else {
-            return Err("개인키 파일이 지정되지 않았습니다.".into());
-        };
-        command.arg("-i").arg(key_path);
-    }
-    Ok(())
+    append_private_key_arg(command, profile)
 }
 
-pub(crate) fn ssh_command(
+pub fn ssh_command(
     profile: &ConnectionProfile,
     known_hosts_file: &Path,
 ) -> Result<Command, String> {
@@ -70,7 +61,7 @@ pub(crate) fn ssh_command(
     Ok(command)
 }
 
-pub(crate) fn interactive_ssh_arguments(
+pub fn interactive_ssh_arguments(
     profile: &ConnectionProfile,
     known_hosts_file: &Path,
 ) -> Result<Vec<String>, String> {
@@ -87,18 +78,15 @@ pub(crate) fn interactive_ssh_arguments(
         profile.port.to_string(),
         "-tt".into(),
     ];
-    if profile.auth_kind == "privateKey" {
-        let Some(key_path) = profile.private_key_path.as_deref() else {
-            return Err("개인키 파일이 지정되지 않았습니다.".into());
-        };
+    if let Some(key_path) = private_key_path(profile)? {
         arguments.push("-i".into());
-        arguments.push(key_path.into());
+        arguments.push(key_path.to_string());
     }
     arguments.push(destination(profile));
     Ok(arguments)
 }
 
-pub(crate) fn sftp_command(
+pub fn sftp_command(
     profile: &ConnectionProfile,
     known_hosts_file: &Path,
 ) -> Result<Command, String> {
@@ -118,14 +106,30 @@ pub(crate) fn sftp_command(
         .arg(format!("UserKnownHostsFile={}", known_hosts_file.display()))
         .arg("-P")
         .arg(profile.port.to_string());
-    if profile.auth_kind == "privateKey" {
-        let Some(key_path) = profile.private_key_path.as_deref() else {
-            return Err("개인키 파일이 지정되지 않았습니다.".into());
-        };
-        command.arg("-i").arg(key_path);
-    }
+    append_private_key_arg(&mut command, profile)?;
     command.arg(destination(profile));
     Ok(command)
+}
+
+fn append_private_key_arg(
+    command: &mut Command,
+    profile: &ConnectionProfile,
+) -> Result<(), String> {
+    if let Some(key_path) = private_key_path(profile)? {
+        command.arg("-i").arg(key_path);
+    }
+    Ok(())
+}
+
+fn private_key_path(profile: &ConnectionProfile) -> Result<Option<&str>, String> {
+    if profile.auth_kind != "privateKey" {
+        return Ok(None);
+    }
+    profile
+        .private_key_path
+        .as_deref()
+        .map(Some)
+        .ok_or("개인키 파일이 지정되지 않았습니다.".into())
 }
 
 #[cfg(target_os = "windows")]
@@ -147,7 +151,7 @@ mod tests {
         destination, escape_remote_shell_path, interactive_ssh_arguments, reject_password_auth,
         sftp_command, ssh_command, validate_remote_path,
     };
-    use crate::models::ConnectionProfile;
+    use crate::ConnectionProfile;
 
     fn profile(auth_kind: &str, private_key_path: Option<&str>) -> ConnectionProfile {
         ConnectionProfile {

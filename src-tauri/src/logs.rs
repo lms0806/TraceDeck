@@ -11,10 +11,10 @@ use tauri::Emitter;
 
 use crate::{
     models::{ConnectionProfile, LogSource, RemoteEntry, RemoteFile, TailChunk},
-    ssh_client::{
-        escape_remote_shell_path, reject_password_auth, ssh_command, validate_remote_path,
-    },
     state::TailStreams,
+};
+use trace_deck_core::ssh::{
+    escape_remote_shell_path, reject_password_auth, ssh_command, validate_remote_path,
 };
 
 pub(crate) fn find_log_files(
@@ -178,7 +178,7 @@ fn run_ssh(
 #[cfg(test)]
 mod tests {
     use super::validate_analysis_paths;
-    use crate::ssh_client::{escape_remote_shell_path, validate_remote_path};
+    use trace_deck_core::ssh::{escape_remote_shell_path, validate_remote_path};
 
     #[test]
     fn rejects_unsafe_paths_and_escapes_shell_metacharacters() {

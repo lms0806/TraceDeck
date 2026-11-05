@@ -10,9 +10,9 @@ use tauri::{Emitter, Manager};
 
 use crate::{
     models::{ConnectionProfile, TerminalChunk},
-    ssh_client::{interactive_ssh_arguments, reject_password_auth},
     state::{TerminalProcess, TerminalSessions},
 };
+use trace_deck_core::ssh::{interactive_ssh_arguments, reject_password_auth};
 
 pub(crate) fn start_terminal(
     profile: &ConnectionProfile,

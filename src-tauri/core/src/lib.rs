@@ -2,6 +2,7 @@
 
 mod paths;
 mod profiles;
+pub mod ssh;
 
 pub use paths::AppPaths;
 pub use profiles::{ConnectionProfile, ProfileStore};

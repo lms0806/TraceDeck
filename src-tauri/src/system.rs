@@ -10,9 +10,9 @@ use tauri::Emitter;
 
 use crate::{
     models::{ConnectionProfile, RemoteSystemStatus, SystemStatusChunk},
-    ssh_client::{reject_password_auth, ssh_command},
     state::SystemStreams,
 };
+use trace_deck_core::ssh::{reject_password_auth, ssh_command};
 
 const STATUS_COMMAND: &str = r#"prev_total=0
 prev_idle=0

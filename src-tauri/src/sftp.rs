@@ -1,11 +1,8 @@
 use std::{io::Write, path::Path, process::Stdio};
 
-use crate::{
-    models::{ConnectionProfile, RemoteEntry},
-    ssh_client::{
-        escape_remote_shell_path, reject_password_auth, sftp_command, ssh_command,
-        validate_remote_path,
-    },
+use crate::models::{ConnectionProfile, RemoteEntry};
+use trace_deck_core::ssh::{
+    escape_remote_shell_path, reject_password_auth, sftp_command, ssh_command, validate_remote_path,
 };
 
 pub(crate) fn list_directory(

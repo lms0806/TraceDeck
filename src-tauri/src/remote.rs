@@ -3,11 +3,11 @@ use tauri::{Emitter, State};
 use crate::{
     models::{ConnectionCheck, ConnectionProfile, LogSource, RemoteEntry, RemoteFile},
     state::{AppState, SystemStreams, TailStreams, TerminalSessions},
-    system,
 };
 use trace_deck_core::{
     logs, sftp,
     ssh::{reject_password_auth, ssh_command},
+    system,
 };
 
 #[tauri::command]
@@ -137,7 +137,9 @@ pub(crate) fn start_remote_system_status_stream(
     state: State<'_, AppState>,
     streams: State<'_, SystemStreams>,
 ) -> Result<u64, String> {
-    system::start_remote_system_stream(&profile, &state.known_hosts_file, app, &streams)
+    system::start_remote_system_stream(&profile, &state.known_hosts_file, &streams, move |chunk| {
+        let _ = app.emit("system-status-chunk", chunk);
+    })
 }
 
 #[tauri::command]

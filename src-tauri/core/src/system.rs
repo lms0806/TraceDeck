@@ -1,18 +1,21 @@
 use std::{
+    collections::HashMap,
     io::{BufRead, BufReader},
     path::Path,
-    process::Stdio,
-    sync::atomic::Ordering,
+    process::{Child, Stdio},
+    sync::{
+        Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
     thread,
 };
 
-use tauri::Emitter;
+use serde::Serialize;
 
 use crate::{
-    models::{ConnectionProfile, RemoteSystemStatus, SystemStatusChunk},
-    state::SystemStreams,
+    ConnectionProfile,
+    ssh::{reject_password_auth, ssh_command},
 };
-use trace_deck_core::ssh::{reject_password_auth, ssh_command};
 
 const STATUS_COMMAND: &str = r#"prev_total=0
 prev_idle=0
@@ -45,12 +48,52 @@ while :; do
   sleep 2
 done"#;
 
-pub(crate) fn start_remote_system_stream(
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteSystemStatus {
+    pub cpu_percent: f64,
+    pub disk_used_kb: u64,
+    pub disk_total_kb: u64,
+    pub disk_percent: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemStatusChunk {
+    pub stream_id: u64,
+    pub status: RemoteSystemStatus,
+}
+
+/// Owns remote system-status stream processes outside a UI framework.
+pub struct SystemStreams {
+    children: Mutex<HashMap<u64, Child>>,
+    next_id: AtomicU64,
+}
+
+impl SystemStreams {
+    pub fn new() -> Self {
+        Self {
+            children: Mutex::new(HashMap::new()),
+            next_id: AtomicU64::new(1),
+        }
+    }
+}
+
+impl Default for SystemStreams {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub fn start_remote_system_stream<F>(
     profile: &ConnectionProfile,
     known_hosts_file: &Path,
-    app: tauri::AppHandle,
     streams: &SystemStreams,
-) -> Result<u64, String> {
+    emit: F,
+) -> Result<u64, String>
+where
+    F: Fn(SystemStatusChunk) + Send + 'static,
+{
     reject_password_auth(profile, "서버 상태 확인")?;
     let mut command = ssh_command(profile, known_hosts_file)?;
     command
@@ -76,19 +119,13 @@ pub(crate) fn start_remote_system_stream(
             let Ok(status) = parse_status_line(&line) else {
                 continue;
             };
-            let _ = app.emit(
-                "system-status-chunk",
-                SystemStatusChunk { stream_id, status },
-            );
+            emit(SystemStatusChunk { stream_id, status });
         }
     });
     Ok(stream_id)
 }
 
-pub(crate) fn stop_remote_system_stream(
-    stream_id: u64,
-    streams: &SystemStreams,
-) -> Result<(), String> {
+pub fn stop_remote_system_stream(stream_id: u64, streams: &SystemStreams) -> Result<(), String> {
     if let Some(mut child) = streams
         .children
         .lock()

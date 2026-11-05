@@ -2,13 +2,12 @@ use std::{
     collections::HashMap,
     io::Write,
     path::PathBuf,
-    process::Child,
     sync::{Mutex, atomic::AtomicU64},
 };
 
 use trace_deck_core::{AppPaths, ProfileStore};
 
-pub(crate) use trace_deck_core::TailStreams;
+pub(crate) use trace_deck_core::{SystemStreams, TailStreams};
 
 pub(crate) struct AppState {
     pub(crate) paths: AppPaths,
@@ -29,11 +28,6 @@ impl AppState {
     }
 }
 
-pub(crate) struct SystemStreams {
-    pub(crate) children: Mutex<HashMap<u64, Child>>,
-    pub(crate) next_id: AtomicU64,
-}
-
 pub(crate) struct TerminalProcess {
     pub(crate) child: Box<dyn portable_pty::Child + Send + Sync>,
     pub(crate) _master: Box<dyn portable_pty::MasterPty + Send>,
@@ -43,15 +37,6 @@ pub(crate) struct TerminalProcess {
 pub(crate) struct TerminalSessions {
     pub(crate) processes: Mutex<HashMap<u64, TerminalProcess>>,
     pub(crate) next_id: AtomicU64,
-}
-
-impl SystemStreams {
-    pub(crate) fn new() -> Self {
-        Self {
-            children: Mutex::new(HashMap::new()),
-            next_id: AtomicU64::new(1),
-        }
-    }
 }
 
 impl TerminalSessions {

@@ -2,7 +2,6 @@ mod models;
 mod profiles;
 mod remote;
 mod state;
-mod system;
 mod terminal;
 
 use tauri::Manager;

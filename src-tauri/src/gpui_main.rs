@@ -1,8 +1,14 @@
+use std::sync::Arc;
+
+use async_channel::Sender;
 use gpui::{
     App, Application, Bounds, Context, Div, IntoElement, Render, StatefulInteractiveElement,
     Window, WindowBounds, WindowOptions, div, prelude::*, px, rgb, size,
 };
-use trace_deck_core::{AppPaths, ConnectionProfile, ProfileStore, RemoteEntry, sftp};
+use trace_deck_core::{
+    AppPaths, ConnectionProfile, ProfileStore, RemoteEntry, RemoteSystemStatus, SystemStatusChunk,
+    TailChunk, logs, sftp, system,
+};
 
 const WINDOW_WIDTH: f32 = 1280.0;
 const WINDOW_HEIGHT: f32 = 800.0;
@@ -20,7 +26,20 @@ struct TraceDeckGpui {
     remote_entries: Vec<RemoteEntry>,
     known_hosts_file: std::path::PathBuf,
     notice: Option<String>,
+    active_log_path: Option<String>,
+    log_content: String,
+    tail_stream_id: Option<u64>,
+    system_stream_id: Option<u64>,
+    remote_status: Option<RemoteSystemStatus>,
+    tail_streams: Arc<logs::TailStreams>,
+    system_streams: Arc<system::SystemStreams>,
+    stream_sender: Sender<StreamEvent>,
     show_new_session_dialog: bool,
+}
+
+enum StreamEvent {
+    Tail(TailChunk),
+    System(SystemStatusChunk),
 }
 
 impl TraceDeckGpui {
@@ -35,8 +54,13 @@ impl TraceDeckGpui {
     }
 
     fn select_profile(&mut self, profile_id: String, cx: &mut Context<Self>) {
+        self.stop_streams();
         self.selected_profile_id = Some(profile_id);
+        self.active_log_path = None;
+        self.log_content.clear();
+        self.remote_status = None;
         self.load_directory("/".to_owned(), cx);
+        self.start_system_status_stream();
     }
 
     fn open_directory(&mut self, path: String, cx: &mut Context<Self>) {
@@ -66,6 +90,98 @@ impl TraceDeckGpui {
             }
         }
         cx.notify();
+    }
+
+    fn open_log(&mut self, path: String, cx: &mut Context<Self>) {
+        let Some(profile) = self
+            .selected_profile_id
+            .as_ref()
+            .and_then(|id| self.profiles.iter().find(|profile| profile.id == *id))
+            .cloned()
+        else {
+            return;
+        };
+
+        self.stop_tail_stream();
+        match logs::read_recent_file(&profile, path.clone(), &self.known_hosts_file) {
+            Ok(file) => {
+                self.active_log_path = Some(file.path.clone());
+                self.log_content = file.content;
+                let sender = self.stream_sender.clone();
+                match logs::start_tail_stream(
+                    &profile,
+                    &file.path,
+                    &self.known_hosts_file,
+                    &self.tail_streams,
+                    move |chunk| {
+                        let _ = sender.try_send(StreamEvent::Tail(chunk));
+                    },
+                ) {
+                    Ok(stream_id) => self.tail_stream_id = Some(stream_id),
+                    Err(error) => self.notice = Some(error),
+                }
+            }
+            Err(error) => self.notice = Some(error),
+        }
+        cx.notify();
+    }
+
+    fn start_system_status_stream(&mut self) {
+        let Some(profile) = self
+            .selected_profile_id
+            .as_ref()
+            .and_then(|id| self.profiles.iter().find(|profile| profile.id == *id))
+            .cloned()
+        else {
+            return;
+        };
+        let sender = self.stream_sender.clone();
+        match system::start_remote_system_stream(
+            &profile,
+            &self.known_hosts_file,
+            &self.system_streams,
+            move |chunk| {
+                let _ = sender.try_send(StreamEvent::System(chunk));
+            },
+        ) {
+            Ok(stream_id) => self.system_stream_id = Some(stream_id),
+            Err(error) => self.notice = Some(error),
+        }
+    }
+
+    fn stop_tail_stream(&mut self) {
+        if let Some(stream_id) = self.tail_stream_id.take() {
+            let _ = logs::stop_tail_stream(stream_id, &self.tail_streams);
+        }
+    }
+
+    fn stop_streams(&mut self) {
+        self.stop_tail_stream();
+        if let Some(stream_id) = self.system_stream_id.take() {
+            let _ = system::stop_remote_system_stream(stream_id, &self.system_streams);
+        }
+    }
+
+    fn receive_stream_event(&mut self, event: StreamEvent, cx: &mut Context<Self>) {
+        match event {
+            StreamEvent::Tail(chunk) if Some(chunk.stream_id) == self.tail_stream_id => {
+                self.log_content.push_str(&chunk.chunk);
+                const MAX_LOG_CHARACTERS: usize = 100_000;
+                if self.log_content.chars().count() > MAX_LOG_CHARACTERS {
+                    self.log_content = self
+                        .log_content
+                        .chars()
+                        .skip(self.log_content.chars().count() - MAX_LOG_CHARACTERS)
+                        .collect();
+                }
+                cx.notify();
+            }
+            StreamEvent::System(chunk) if Some(chunk.stream_id) == self.system_stream_id => {
+                self.remote_status = Some(chunk.status);
+                cx.notify();
+            }
+            _ => {}
+        }
     }
 
     fn parent_directory(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
@@ -276,6 +392,20 @@ impl TraceDeckGpui {
                         .child(self.core_status.clone()),
                 ),
         };
+        let (cpu_label, disk_label) = self.remote_status.as_ref().map_or_else(
+            || ("CPU  —".to_owned(), "DISK  —".to_owned()),
+            |status| {
+                (
+                    format!("CPU  {:.0}%", status.cpu_percent),
+                    format!(
+                        "DISK  {:.1} / {:.1} GiB ({:.0}%)",
+                        status.disk_used_kb as f64 / 1_048_576.0,
+                        status.disk_total_kb as f64 / 1_048_576.0,
+                        status.disk_percent
+                    ),
+                )
+            },
+        );
 
         div()
             .flex_1()
@@ -318,8 +448,8 @@ impl TraceDeckGpui {
                     .px(px(14.0))
                     .text_xs()
                     .text_color(rgb(MUTED_TEXT))
-                    .child("CPU  —")
-                    .child("DISK  —"),
+                    .child(cpu_label)
+                    .child(disk_label),
             )
     }
 
@@ -373,16 +503,20 @@ impl TraceDeckGpui {
                         .text_color(rgb(MUTED_TEXT))
                         .child(details),
                 );
-            entries = if is_directory {
-                entries.child(
-                    row.cursor_pointer()
-                        .on_click(cx.listener(move |this, _, _, cx| {
+            entries =
+                if is_directory {
+                    entries.child(row.cursor_pointer().on_click(cx.listener(
+                        move |this, _, _, cx| {
                             this.open_directory(entry_path.clone(), cx);
-                        })),
-                )
-            } else {
-                entries.child(row)
-            };
+                        },
+                    )))
+                } else {
+                    entries.child(row.cursor_pointer().on_click(cx.listener(
+                        move |this, _, _, cx| {
+                            this.open_log(entry_path.clone(), cx);
+                        },
+                    )))
+                };
         }
 
         div()
@@ -448,6 +582,48 @@ impl TraceDeckGpui {
                     .child(notice)
             }))
             .child(entries)
+            .child(self.log_panel())
+    }
+
+    fn log_panel(&self) -> Div {
+        let title = self.active_log_path.as_deref().map_or(
+            "파일을 선택하면 최근 로그와 실시간 tail을 표시합니다.",
+            |path| path,
+        );
+        let content = if self.log_content.is_empty() {
+            "로그 내용이 없습니다.".to_owned()
+        } else {
+            self.log_content.clone()
+        };
+        div()
+            .h(px(220.0))
+            .flex_shrink_0()
+            .flex()
+            .flex_col()
+            .border_t_1()
+            .border_color(rgb(BORDER))
+            .bg(rgb(0x0d141b))
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .border_b_1()
+                    .border_color(rgb(BORDER))
+                    .px(px(14.0))
+                    .py(px(8.0))
+                    .text_sm()
+                    .text_color(rgb(MUTED_TEXT))
+                    .child(title.to_owned()),
+            )
+            .child(
+                div()
+                    .id("log-content")
+                    .flex_1()
+                    .overflow_y_scroll()
+                    .p(px(12.0))
+                    .text_xs()
+                    .text_color(rgb(0xc8d7e5))
+                    .child(content),
+            )
     }
 
     fn new_session_dialog(&self, cx: &mut Context<Self>) -> Div {
@@ -621,14 +797,15 @@ fn initialize_core() -> InitialState {
 fn main() {
     let initial_state = initialize_core();
     Application::new().run(move |cx: &mut App| {
+        let (stream_sender, stream_receiver) = async_channel::unbounded();
         let bounds = Bounds::centered(None, size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)), cx);
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 ..Default::default()
             },
-            |_, cx| {
-                cx.new(|_| TraceDeckGpui {
+            |window, cx| {
+                let view = cx.new(|_| TraceDeckGpui {
                     core_status: initial_state.core_status.clone(),
                     profiles: initial_state.profiles.clone(),
                     selected_profile_id: None,
@@ -636,8 +813,27 @@ fn main() {
                     remote_entries: Vec::new(),
                     known_hosts_file: initial_state.known_hosts_file.clone(),
                     notice: None,
+                    active_log_path: None,
+                    log_content: String::new(),
+                    tail_stream_id: None,
+                    system_stream_id: None,
+                    remote_status: None,
+                    tail_streams: Arc::new(logs::TailStreams::new()),
+                    system_streams: Arc::new(system::SystemStreams::new()),
+                    stream_sender: stream_sender.clone(),
                     show_new_session_dialog: false,
-                })
+                });
+                let event_view = view.clone();
+                window
+                    .spawn(cx, async move |cx| {
+                        while let Ok(event) = stream_receiver.recv().await {
+                            let _ = event_view.update(cx, |this, cx| {
+                                this.receive_stream_event(event, cx);
+                            });
+                        }
+                    })
+                    .detach();
+                view
             },
         )
         .expect("TraceDeck GPUI 창을 열 수 없습니다.");

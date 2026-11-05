@@ -1,11 +1,12 @@
 use std::num::NonZeroU16;
+use std::ops::Range;
 use std::sync::Arc;
 
 use async_channel::Sender;
 use gpui::{
-    App, Application, Bounds, Context, Div, FocusHandle, IntoElement, Render,
-    StatefulInteractiveElement, Window, WindowBounds, WindowOptions, div, prelude::*, px, rgb,
-    size,
+    App, Application, Bounds, Context, Div, FocusHandle, HighlightStyle, IntoElement, Render,
+    ScrollHandle, StatefulInteractiveElement, StyledText, Window, WindowBounds, WindowOptions, div,
+    prelude::*, px, rgb, size,
 };
 use trace_deck_core::{
     AppPaths, ConnectionProfile, ProfileStore, RemoteEntry, RemoteSystemStatus, SystemStatusChunk,
@@ -40,10 +41,18 @@ struct TraceDeckGpui {
     terminal_sessions: terminal::TerminalSessions,
     terminal_tabs: Vec<TerminalTab>,
     active_terminal_id: Option<u64>,
+    sidebar_scroll: ScrollHandle,
+    file_list_scroll: ScrollHandle,
+    log_scroll: ScrollHandle,
+    terminal_scroll: ScrollHandle,
     terminal_focus: FocusHandle,
     session_form_focus: FocusHandle,
+    server_search_focus: FocusHandle,
+    server_search: String,
     session_draft: SessionDraft,
     active_draft_field: DraftField,
+    active_bottom_panel: BottomPanel,
+    bottom_panel_height: f32,
     show_new_session_dialog: bool,
 }
 
@@ -59,6 +68,14 @@ struct TerminalTab {
     parser: vt100::Parser,
 }
 
+struct ResizeDragPreview;
+
+impl Render for ResizeDragPreview {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div().size(px(1.0))
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum DraftField {
     Name,
@@ -66,6 +83,12 @@ enum DraftField {
     Port,
     Username,
     PrivateKey,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BottomPanel {
+    Log,
+    Terminal,
 }
 
 struct SessionDraft {
@@ -107,6 +130,65 @@ impl TraceDeckGpui {
         cx.notify();
     }
 
+    fn select_log_panel(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+        self.active_bottom_panel = BottomPanel::Log;
+        cx.notify();
+    }
+
+    fn select_terminal_panel(
+        &mut self,
+        _: &gpui::ClickEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.active_bottom_panel = BottomPanel::Terminal;
+        cx.notify();
+    }
+
+    fn resize_bottom_panel(
+        &mut self,
+        event: &gpui::DragMoveEvent<()>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let window_height = f32::from(window.bounds().size.height);
+        let pointer_y = f32::from(event.event.position.y);
+        self.bottom_panel_height = (window_height - pointer_y).clamp(160.0, 600.0);
+        cx.notify();
+    }
+
+    fn refresh_scrollbar(
+        &mut self,
+        _: &gpui::ScrollWheelEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.notify();
+    }
+
+    fn scrollbar_thumb(&self, id: &'static str, handle: &ScrollHandle) -> gpui::Stateful<Div> {
+        let viewport_height = f32::from(handle.bounds().size.height);
+        let max_offset = f32::from(handle.max_offset().height);
+        let offset = -f32::from(handle.offset().y);
+        if viewport_height <= 0.0 || max_offset <= 0.0 {
+            return div().id(id).absolute().w(px(0.0)).h(px(0.0));
+        }
+        let thumb_height = (viewport_height * viewport_height / (viewport_height + max_offset))
+            .clamp(24.0, (viewport_height - 8.0).max(24.0));
+        let travel = (viewport_height - thumb_height - 8.0).max(0.0);
+        let top = 4.0 + (offset / max_offset).clamp(0.0, 1.0) * travel;
+
+        div()
+            .id(id)
+            .absolute()
+            .top(px(top))
+            .right(px(3.0))
+            .w(px(5.0))
+            .h(px(thumb_height))
+            .rounded_lg()
+            .bg(rgb(0x61798d))
+    }
+
     fn activate_draft_field(
         &mut self,
         field: DraftField,
@@ -115,6 +197,34 @@ impl TraceDeckGpui {
     ) {
         self.active_draft_field = field;
         window.focus(&self.session_form_focus);
+        cx.notify();
+    }
+
+    fn activate_server_search(
+        &mut self,
+        _: &gpui::ClickEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        window.focus(&self.server_search_focus);
+        cx.notify();
+    }
+
+    fn edit_server_search(
+        &mut self,
+        event: &gpui::KeyDownEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match event.keystroke.key.as_str() {
+            "backspace" => {
+                self.server_search.pop();
+            }
+            "escape" => self.server_search.clear(),
+            "space" => self.server_search.push(' '),
+            character if character.chars().count() == 1 => self.server_search.push_str(character),
+            _ => return,
+        }
         cx.notify();
     }
 
@@ -274,7 +384,7 @@ impl TraceDeckGpui {
         match logs::read_recent_file(&profile, path.clone(), &self.known_hosts_file) {
             Ok(file) => {
                 self.active_log_path = Some(file.path.clone());
-                self.log_content = file.content;
+                self.log_content = normalize_newlines(file.content);
                 let sender = self.stream_sender.clone();
                 match logs::start_tail_stream(
                     &profile,
@@ -330,7 +440,7 @@ impl TraceDeckGpui {
         }
     }
 
-    fn open_terminal(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn open_terminal(&mut self, _: &gpui::ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         let Some(profile) = self
             .selected_profile_id
             .as_ref()
@@ -362,6 +472,7 @@ impl TraceDeckGpui {
                     ),
                 });
                 self.active_terminal_id = Some(terminal_id);
+                window.focus(&self.terminal_focus);
             }
             Err(error) => self.notice = Some(error),
         }
@@ -379,7 +490,7 @@ impl TraceDeckGpui {
         };
         let key = event.keystroke.key.as_str();
         let input = match key {
-            "enter" => "\r".to_owned(),
+            "enter" | "return" => "\r".to_owned(),
             "backspace" => "\u{7f}".to_owned(),
             "tab" => "\t".to_owned(),
             "escape" => "\u{1b}".to_owned(),
@@ -387,6 +498,7 @@ impl TraceDeckGpui {
             "down" => "\u{1b}[B".to_owned(),
             "right" => "\u{1b}[C".to_owned(),
             "left" => "\u{1b}[D".to_owned(),
+            "space" => " ".to_owned(),
             value if value.chars().count() == 1 => value.to_owned(),
             _ => return,
         };
@@ -418,7 +530,7 @@ impl TraceDeckGpui {
     fn receive_stream_event(&mut self, event: StreamEvent, cx: &mut Context<Self>) {
         match event {
             StreamEvent::Tail(chunk) if Some(chunk.stream_id) == self.tail_stream_id => {
-                self.log_content.push_str(&chunk.chunk);
+                self.log_content.push_str(&normalize_newlines(chunk.chunk));
                 const MAX_LOG_CHARACTERS: usize = 100_000;
                 if self.log_content.chars().count() > MAX_LOG_CHARACTERS {
                     self.log_content = self
@@ -541,26 +653,51 @@ impl TraceDeckGpui {
             )
     }
 
-    fn sidebar(&self, cx: &mut Context<Self>) -> Div {
+    fn sidebar(&self, cx: &mut Context<Self>) -> gpui::Stateful<Div> {
+        let search_query = self.server_search.trim().to_lowercase();
+        let matching_profiles = self
+            .profiles
+            .iter()
+            .filter(|profile| profile_matches_search(profile, &search_query))
+            .collect::<Vec<_>>();
+        let search_label = if self.server_search.is_empty() {
+            "⌕  서버 검색".to_owned()
+        } else {
+            format!("⌕  {}", self.server_search)
+        };
         div()
+            .id("sidebar")
             .w(px(264.0))
             .flex_shrink_0()
+            .min_h_0()
             .flex()
             .flex_col()
+            .overflow_y_scroll()
+            .track_scroll(&self.sidebar_scroll)
+            .on_scroll_wheel(cx.listener(Self::refresh_scrollbar))
             .bg(rgb(PANEL_BACKGROUND))
             .border_r_1()
             .border_color(rgb(BORDER))
             .child(
                 div().p(px(10.0)).child(
                     div()
+                        .id("server-search")
+                        .track_focus(&self.server_search_focus)
                         .rounded_md()
                         .border_1()
                         .border_color(rgb(0x40566b))
                         .px(px(12.0))
                         .py(px(9.0))
                         .text_sm()
-                        .text_color(rgb(MUTED_TEXT))
-                        .child("⌕  서버 검색"),
+                        .text_color(if self.server_search.is_empty() {
+                            rgb(MUTED_TEXT)
+                        } else {
+                            rgb(0xffffff)
+                        })
+                        .cursor_text()
+                        .child(search_label)
+                        .on_click(cx.listener(Self::activate_server_search))
+                        .on_key_down(cx.listener(Self::edit_server_search)),
                 ),
             )
             .child(
@@ -584,7 +721,7 @@ impl TraceDeckGpui {
                             .on_click(cx.listener(Self::open_new_session)),
                     ),
             )
-            .children(self.profiles.iter().enumerate().map(|(index, profile)| {
+            .children(matching_profiles.iter().enumerate().map(|(index, profile)| {
                 let profile_id = profile.id.clone();
                 let active = self.selected_profile_id.as_deref() == Some(profile.id.as_str());
                 div()
@@ -621,6 +758,19 @@ impl TraceDeckGpui {
                         .text_sm()
                         .text_color(rgb(MUTED_TEXT))
                         .child("저장된 세션이 없습니다.\n기존 Tauri 앱에서 세션을 추가하면 여기에도 표시됩니다."),
+                )
+            })
+            .when(!self.profiles.is_empty() && !self.server_search.is_empty() && matching_profiles.is_empty(), |sidebar| {
+                sidebar.child(
+                    div()
+                        .mx(px(10.0))
+                        .rounded_md()
+                        .border_1()
+                        .border_color(rgb(BORDER))
+                        .p(px(14.0))
+                        .text_sm()
+                        .text_color(rgb(MUTED_TEXT))
+                        .child("일치하는 저장 세션이 없습니다."),
                 )
             })
             .child(
@@ -755,9 +905,12 @@ impl TraceDeckGpui {
         let mut entries = div()
             .id("remote-file-list")
             .flex_1()
+            .min_h_0()
             .flex()
             .flex_col()
-            .overflow_y_scroll();
+            .overflow_scroll()
+            .track_scroll(&self.file_list_scroll)
+            .on_scroll_wheel(cx.listener(Self::refresh_scrollbar));
         if self.remote_path != "/" {
             entries = entries.child(
                 div()
@@ -792,7 +945,7 @@ impl TraceDeckGpui {
                 .py(px(10.0))
                 .text_sm()
                 .hover(|style| style.bg(rgb(0x1c2935)))
-                .child(if is_directory { "▸" } else { "□" })
+                .child(entry_icon(is_directory))
                 .child(div().text_color(gpui::white()).child(entry_name))
                 .child(
                     div()
@@ -880,23 +1033,106 @@ impl TraceDeckGpui {
                     .child(notice)
             }))
             .child(entries)
-            .child(self.log_panel())
-            .child(self.terminal_panel(cx))
+            .child(self.bottom_panel_resizer(cx))
+            .child(self.bottom_panel(cx))
     }
 
-    fn log_panel(&self) -> Div {
+    fn bottom_panel_resizer(&self, cx: &mut Context<Self>) -> gpui::Stateful<Div> {
+        div()
+            .id("bottom-panel-resizer")
+            .h(px(6.0))
+            .flex_shrink_0()
+            .bg(rgb(BORDER))
+            .hover(|style| style.bg(rgb(ACCENT)))
+            .on_drag((), |_, _, _, cx| cx.new(|_| ResizeDragPreview))
+            .on_drag_move(cx.listener(Self::resize_bottom_panel))
+    }
+
+    fn bottom_panel(&self, cx: &mut Context<Self>) -> Div {
+        let log_active = self.active_bottom_panel == BottomPanel::Log;
+        div()
+            .h(px(self.bottom_panel_height))
+            .flex_shrink_0()
+            .flex()
+            .flex_col()
+            .border_t_1()
+            .border_color(rgb(BORDER))
+            .bg(rgb(0x0d141b))
+            .child(
+                div()
+                    .h(px(34.0))
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .border_b_1()
+                    .border_color(rgb(BORDER))
+                    .child(
+                        div()
+                            .id("bottom-log-tab")
+                            .cursor_pointer()
+                            .h_full()
+                            .flex()
+                            .items_center()
+                            .border_t_2()
+                            .border_color(if log_active {
+                                rgb(ACCENT)
+                            } else {
+                                rgb(0x0d141b)
+                            })
+                            .px(px(14.0))
+                            .text_sm()
+                            .text_color(if log_active {
+                                rgb(0xffffff)
+                            } else {
+                                rgb(MUTED_TEXT)
+                            })
+                            .child("로그")
+                            .on_click(cx.listener(Self::select_log_panel)),
+                    )
+                    .child(
+                        div()
+                            .id("bottom-terminal-tab")
+                            .cursor_pointer()
+                            .h_full()
+                            .flex()
+                            .items_center()
+                            .border_t_2()
+                            .border_color(if log_active {
+                                rgb(0x0d141b)
+                            } else {
+                                rgb(ACCENT)
+                            })
+                            .px(px(14.0))
+                            .text_sm()
+                            .text_color(if log_active {
+                                rgb(MUTED_TEXT)
+                            } else {
+                                rgb(0xffffff)
+                            })
+                            .child("터미널")
+                            .on_click(cx.listener(Self::select_terminal_panel)),
+                    ),
+            )
+            .child(if log_active {
+                self.log_panel(cx)
+            } else {
+                self.terminal_panel(cx)
+            })
+    }
+
+    fn log_panel(&self, cx: &mut Context<Self>) -> Div {
         let title = self.active_log_path.as_deref().map_or(
             "파일을 선택하면 최근 로그와 실시간 tail을 표시합니다.",
             |path| path,
         );
-        let content = if self.log_content.is_empty() {
-            "로그 내용이 없습니다.".to_owned()
+        let display = if self.log_content.is_empty() {
+            LogDisplay::plain("로그 내용이 없습니다.".to_owned())
         } else {
-            self.log_content.clone()
+            parse_log_content(&self.log_content)
         };
         div()
-            .h(px(220.0))
-            .flex_shrink_0()
+            .flex_1()
+            .min_h_0()
             .flex()
             .flex_col()
             .border_t_1()
@@ -915,13 +1151,32 @@ impl TraceDeckGpui {
             )
             .child(
                 div()
-                    .id("log-content")
+                    .relative()
                     .flex_1()
-                    .overflow_y_scroll()
-                    .p(px(12.0))
-                    .text_xs()
-                    .text_color(rgb(0xc8d7e5))
-                    .child(content),
+                    .min_h_0()
+                    .child(
+                        div()
+                            .id("log-content")
+                            .size_full()
+                            .overflow_scroll()
+                            .track_scroll(&self.log_scroll)
+                            .on_scroll_wheel(cx.listener(Self::refresh_scrollbar))
+                            .p(px(12.0))
+                            .text_size(px(12.5))
+                            .text_color(rgb(0xc8d7e5))
+                            .child(StyledText::new(display.text).with_highlights(
+                                display.highlights.into_iter().map(|highlight| {
+                                    (
+                                        highlight.range,
+                                        HighlightStyle {
+                                            color: Some(rgb(highlight.color).into()),
+                                            ..Default::default()
+                                        },
+                                    )
+                                }),
+                            )),
+                    )
+                    .child(self.scrollbar_thumb("log", &self.log_scroll)),
             )
     }
 
@@ -938,8 +1193,8 @@ impl TraceDeckGpui {
             |tab| tab.parser.screen().contents(),
         );
         div()
-            .h(px(220.0))
-            .flex_shrink_0()
+            .flex_1()
+            .min_h_0()
             .flex()
             .flex_col()
             .border_t_1()
@@ -973,17 +1228,26 @@ impl TraceDeckGpui {
             )
             .child(
                 div()
-                    .id("terminal-content")
-                    .track_focus(&self.terminal_focus)
+                    .relative()
                     .flex_1()
-                    .overflow_y_scroll()
-                    .cursor_text()
-                    .p(px(12.0))
-                    .text_xs()
-                    .text_color(rgb(0xd6e1ea))
-                    .on_click(cx.listener(Self::focus_terminal))
-                    .on_key_down(cx.listener(Self::send_terminal_key))
-                    .child(content),
+                    .min_h_0()
+                    .child(
+                        div()
+                            .id("terminal-content")
+                            .size_full()
+                            .track_focus(&self.terminal_focus)
+                            .overflow_scroll()
+                            .track_scroll(&self.terminal_scroll)
+                            .on_scroll_wheel(cx.listener(Self::refresh_scrollbar))
+                            .cursor_text()
+                            .p(px(12.0))
+                            .text_xs()
+                            .text_color(rgb(0xd6e1ea))
+                            .on_click(cx.listener(Self::focus_terminal))
+                            .on_key_down(cx.listener(Self::send_terminal_key))
+                            .child(content),
+                    )
+                    .child(self.scrollbar_thumb("terminal", &self.terminal_scroll)),
             )
     }
 
@@ -1198,6 +1462,278 @@ struct InitialState {
     profile_file: std::path::PathBuf,
 }
 
+fn profile_matches_search(profile: &ConnectionProfile, query: &str) -> bool {
+    query.is_empty()
+        || [
+            profile.name.as_str(),
+            profile.host.as_str(),
+            profile.username.as_str(),
+        ]
+        .iter()
+        .any(|value| value.to_lowercase().contains(query))
+}
+
+fn entry_icon(is_directory: bool) -> Div {
+    if is_directory {
+        div()
+            .relative()
+            .w(px(18.0))
+            .h(px(16.0))
+            .flex_shrink_0()
+            .child(
+                div()
+                    .absolute()
+                    .left(px(1.0))
+                    .top(px(1.0))
+                    .w(px(8.0))
+                    .h(px(5.0))
+                    .rounded_sm()
+                    .bg(rgb(0xe7bc66)),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .left(px(0.0))
+                    .top(px(4.0))
+                    .w(px(18.0))
+                    .h(px(11.0))
+                    .rounded_sm()
+                    .bg(rgb(0xe7bc66)),
+            )
+    } else {
+        div()
+            .relative()
+            .w(px(18.0))
+            .h(px(16.0))
+            .flex_shrink_0()
+            .child(
+                div()
+                    .absolute()
+                    .left(px(3.0))
+                    .top(px(0.0))
+                    .w(px(12.0))
+                    .h(px(16.0))
+                    .rounded_sm()
+                    .border_1()
+                    .border_color(rgb(0xa9bdcc)),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .left(px(5.0))
+                    .top(px(5.0))
+                    .w(px(8.0))
+                    .h(px(1.0))
+                    .bg(rgb(0xa9bdcc)),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .left(px(5.0))
+                    .top(px(9.0))
+                    .w(px(8.0))
+                    .h(px(1.0))
+                    .bg(rgb(0xa9bdcc)),
+            )
+    }
+}
+
+struct LogDisplay {
+    text: String,
+    highlights: Vec<LogHighlight>,
+}
+
+struct LogHighlight {
+    range: Range<usize>,
+    color: u32,
+}
+
+impl LogDisplay {
+    fn plain(text: String) -> Self {
+        Self {
+            text,
+            highlights: Vec::new(),
+        }
+    }
+}
+
+fn normalize_newlines(content: String) -> String {
+    content.replace("\r\n", "\n").replace('\r', "\n")
+}
+
+fn parse_log_content(content: &str) -> LogDisplay {
+    let bytes = content.as_bytes();
+    let mut text = String::with_capacity(content.len());
+    let mut highlights = Vec::new();
+    let mut foreground = None;
+    let mut dim = false;
+    let mut highlight_start = None;
+    let mut index = 0;
+
+    while index < bytes.len() {
+        if bytes[index] == 0x1b {
+            if let Some((end, command)) = csi_command(bytes, index) {
+                if command == b'm' {
+                    let next_style = sgr_style(&bytes[index + 2..end], foreground, dim);
+                    let next_color =
+                        next_style
+                            .0
+                            .or(if next_style.1 { Some(MUTED_TEXT) } else { None });
+                    let current_color = foreground.or(if dim { Some(MUTED_TEXT) } else { None });
+                    if next_color != current_color {
+                        finish_log_highlight(
+                            &mut highlights,
+                            &mut highlight_start,
+                            text.len(),
+                            current_color,
+                        );
+                        highlight_start = next_color.map(|_| text.len());
+                    }
+                    foreground = next_style.0;
+                    dim = next_style.1;
+                }
+                index = end + 1;
+                continue;
+            }
+
+            if bytes.get(index + 1) == Some(&b']') {
+                index = skip_osc(bytes, index + 2);
+                continue;
+            }
+
+            index += 1;
+            continue;
+        }
+
+        let remaining = &content[index..];
+        let character = remaining
+            .chars()
+            .next()
+            .expect("the byte index always points to a character boundary");
+        text.push(character);
+        index += character.len_utf8();
+    }
+
+    let current_color = foreground.or(if dim { Some(MUTED_TEXT) } else { None });
+    finish_log_highlight(
+        &mut highlights,
+        &mut highlight_start,
+        text.len(),
+        current_color,
+    );
+
+    LogDisplay { text, highlights }
+}
+
+fn csi_command(bytes: &[u8], start: usize) -> Option<(usize, u8)> {
+    (bytes.get(start + 1) == Some(&b'[')).then_some(())?;
+    let end = (start + 2..bytes.len()).find(|&index| (b'@'..=b'~').contains(&bytes[index]))?;
+    Some((end, bytes[end]))
+}
+
+fn skip_osc(bytes: &[u8], mut index: usize) -> usize {
+    while index < bytes.len() {
+        if bytes[index] == 0x07 {
+            return index + 1;
+        }
+        if bytes[index] == 0x1b && bytes.get(index + 1) == Some(&b'\\') {
+            return index + 2;
+        }
+        index += 1;
+    }
+    index
+}
+
+fn finish_log_highlight(
+    highlights: &mut Vec<LogHighlight>,
+    start: &mut Option<usize>,
+    end: usize,
+    color: Option<u32>,
+) {
+    if let (Some(start), Some(color)) = (start.take(), color)
+        && start < end
+    {
+        highlights.push(LogHighlight {
+            range: start..end,
+            color,
+        });
+    }
+}
+
+fn sgr_style(parameters: &[u8], mut foreground: Option<u32>, mut dim: bool) -> (Option<u32>, bool) {
+    let values = std::str::from_utf8(parameters)
+        .unwrap_or_default()
+        .split(';')
+        .map(|value| value.parse::<u16>().unwrap_or(0))
+        .collect::<Vec<_>>();
+    let mut index = 0;
+
+    while index < values.len().max(1) {
+        let value = values.get(index).copied().unwrap_or(0);
+        match value {
+            0 => {
+                foreground = None;
+                dim = false;
+            }
+            2 => dim = true,
+            22 => dim = false,
+            30..=37 | 90..=97 => foreground = ansi_standard_color(value),
+            39 => foreground = None,
+            38 if values.get(index + 1) == Some(&5) => {
+                if let Some(color) = values.get(index + 2) {
+                    foreground = Some(ansi_256_color(*color));
+                    index += 2;
+                }
+            }
+            38 if values.get(index + 1) == Some(&2) => {
+                if let (Some(red), Some(green), Some(blue)) = (
+                    values.get(index + 2),
+                    values.get(index + 3),
+                    values.get(index + 4),
+                ) {
+                    foreground = Some((*red as u32) << 16 | (*green as u32) << 8 | *blue as u32);
+                    index += 4;
+                }
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+
+    (foreground, dim)
+}
+
+fn ansi_standard_color(value: u16) -> Option<u32> {
+    const COLORS: [u32; 16] = [
+        0x4e5a65, 0xe06c75, 0x98c379, 0xe5c07b, 0x61afef, 0xc678dd, 0x56b6c2, 0xd8dee9, 0x7f8c98,
+        0xff7b86, 0xb7e19d, 0xffd683, 0x83c5ff, 0xe2a5f5, 0x7cdbeb, 0xffffff,
+    ];
+    let index = match value {
+        30..=37 => value - 30,
+        90..=97 => value - 90 + 8,
+        _ => return None,
+    };
+    COLORS.get(index as usize).copied()
+}
+
+fn ansi_256_color(value: u16) -> u32 {
+    if value < 16 {
+        return ansi_standard_color(if value < 8 { value + 30 } else { value + 82 })
+            .unwrap_or(0xc8d7e5);
+    }
+    if value >= 232 {
+        let shade = 8 + (value as u32 - 232) * 10;
+        return shade << 16 | shade << 8 | shade;
+    }
+
+    let value = value as u32 - 16;
+    let component = |part| if part == 0 { 0 } else { 55 + part * 40 };
+    let red = component(value / 36);
+    let green = component((value / 6) % 6);
+    let blue = component(value % 6);
+    red << 16 | green << 8 | blue
+}
+
 fn initialize_core() -> InitialState {
     match AppPaths::for_current_user().and_then(|paths| {
         paths.ensure_exists()?;
@@ -1242,6 +1778,7 @@ fn main() {
             |window, cx| {
                 let terminal_focus = cx.focus_handle();
                 let session_form_focus = cx.focus_handle();
+                let server_search_focus = cx.focus_handle();
                 let view = cx.new(|_| TraceDeckGpui {
                     core_status: initial_state.core_status.clone(),
                     profiles: initial_state.profiles.clone(),
@@ -1262,10 +1799,18 @@ fn main() {
                     terminal_sessions: terminal::TerminalSessions::new(),
                     terminal_tabs: Vec::new(),
                     active_terminal_id: None,
+                    sidebar_scroll: ScrollHandle::new(),
+                    file_list_scroll: ScrollHandle::new(),
+                    log_scroll: ScrollHandle::new(),
+                    terminal_scroll: ScrollHandle::new(),
                     terminal_focus,
                     session_form_focus,
+                    server_search_focus,
+                    server_search: String::new(),
                     session_draft: SessionDraft::default(),
                     active_draft_field: DraftField::Name,
+                    active_bottom_panel: BottomPanel::Log,
+                    bottom_panel_height: 254.0,
                     show_new_session_dialog: false,
                 });
                 let event_view = view.clone();
@@ -1284,4 +1829,22 @@ fn main() {
         .expect("TraceDeck GPUI 창을 열 수 없습니다.");
         cx.activate(true);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{normalize_newlines, parse_log_content};
+
+    #[test]
+    fn preserves_ansi_colors_and_normalizes_newlines() {
+        let content = normalize_newlines(
+            "\u{1b}[2m2026-11-05\u{1b}[0m\r\n\u{1b}[31merror\u{1b}[0m".to_owned(),
+        );
+        let display = parse_log_content(&content);
+
+        assert_eq!(display.text, "2026-11-05\nerror");
+        assert_eq!(display.highlights.len(), 2);
+        assert_eq!(display.highlights[1].range, 11..16);
+        assert_eq!(display.highlights[1].color, 0xe06c75);
+    }
 }

@@ -1100,6 +1100,25 @@ impl TraceDeckGpui {
             .overflow_scroll()
             .track_scroll(&self.file_list_scroll)
             .on_scroll_wheel(cx.listener(Self::refresh_scrollbar));
+        entries = entries.child(
+            div()
+                .flex()
+                .items_center()
+                .border_b_1()
+                .border_color(rgb(0x20303e))
+                .px(px(18.0))
+                .py(px(9.0))
+                .text_xs()
+                .text_color(rgb(0x71879a))
+                .child(div().flex_1().child("이름"))
+                .child(metadata_columns([
+                    "Access".into(),
+                    "Owner".into(),
+                    "Group".into(),
+                    "Size".into(),
+                    "Last modified".into(),
+                ])),
+        );
         if self.remote_path != "/" {
             entries = entries.child(
                 div()
@@ -1142,14 +1161,14 @@ impl TraceDeckGpui {
                 )
                 .hover(|style| style.bg(rgb(0x1c2935)))
                 .child(entry_icon(is_directory))
-                .child(div().text_color(gpui::white()).child(entry_name))
                 .child(
                     div()
-                        .ml_auto()
-                        .text_xs()
-                        .text_color(rgb(MUTED_TEXT))
-                        .child(details),
-                );
+                        .flex_1()
+                        .min_w_0()
+                        .text_color(gpui::white())
+                        .child(entry_name),
+                )
+                .child(metadata_columns(entry_metadata(&details).values()));
             entries =
                 if is_directory {
                     entries.child(row.cursor_pointer().on_click(cx.listener(
@@ -1859,6 +1878,60 @@ fn profile_matches_search(profile: &ConnectionProfile, query: &str) -> bool {
         .any(|value| value.to_lowercase().contains(query))
 }
 
+struct EntryMetadata {
+    access: String,
+    owner: String,
+    group: String,
+    size: String,
+    modified: String,
+}
+
+impl EntryMetadata {
+    fn values(&self) -> [String; 5] {
+        [
+            self.access.clone(),
+            self.owner.clone(),
+            self.group.clone(),
+            self.size.clone(),
+            self.modified.clone(),
+        ]
+    }
+}
+
+fn entry_metadata(details: &str) -> EntryMetadata {
+    let columns = details.split_whitespace().collect::<Vec<_>>();
+    if columns.len() < 8 {
+        return EntryMetadata {
+            access: details.into(),
+            owner: "—".into(),
+            group: "—".into(),
+            size: "—".into(),
+            modified: "—".into(),
+        };
+    }
+    EntryMetadata {
+        access: columns[0].into(),
+        owner: columns[2].into(),
+        group: columns[3].into(),
+        size: columns[4].into(),
+        modified: format!("{} {} {}", columns[5], columns[6], columns[7]),
+    }
+}
+
+fn metadata_columns(values: [String; 5]) -> Div {
+    div()
+        .w(px(520.0))
+        .flex()
+        .items_center()
+        .text_xs()
+        .text_color(rgb(MUTED_TEXT))
+        .child(div().w(px(100.0)).child(values[0].clone()))
+        .child(div().w(px(72.0)).child(values[1].clone()))
+        .child(div().w(px(72.0)).child(values[2].clone()))
+        .child(div().w(px(76.0)).child(values[3].clone()))
+        .child(div().w(px(190.0)).child(values[4].clone()))
+}
+
 fn entry_icon(is_directory: bool) -> Div {
     if is_directory {
         div()
@@ -2224,7 +2297,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_newlines, parse_log_content};
+    use super::{entry_metadata, normalize_newlines, parse_log_content};
 
     #[test]
     fn preserves_ansi_colors_and_normalizes_newlines() {
@@ -2237,5 +2310,13 @@ mod tests {
         assert_eq!(display.highlights.len(), 2);
         assert_eq!(display.highlights[1].range, 11..16);
         assert_eq!(display.highlights[1].color, 0xe06c75);
+    }
+
+    #[test]
+    fn labels_remote_entry_metadata_in_column_order() {
+        assert_eq!(
+            entry_metadata("-rw-r--r-- 1 opc staff 5150 Oct 22 23:41 app.log").values(),
+            ["-rw-r--r--", "opc", "staff", "5150", "Oct 22 23:41"].map(str::to_owned)
+        );
     }
 }

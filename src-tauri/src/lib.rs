@@ -5,13 +5,11 @@ mod remote;
 mod sftp;
 mod ssh_client;
 mod state;
-mod storage_security;
 mod system;
 mod terminal;
 
-use std::fs;
-
 use tauri::Manager;
+use trace_deck_core::AppPaths;
 
 use state::{AppState, SystemStreams, TailStreams, TerminalSessions};
 
@@ -21,11 +19,9 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
-            fs::create_dir_all(&data_dir)?;
-            app.manage(AppState {
-                profile_file: data_dir.join("profiles.json"),
-                known_hosts_file: data_dir.join("known_hosts"),
-            });
+            let paths = AppPaths::from_data_dir(data_dir);
+            paths.ensure_exists().map_err(std::io::Error::other)?;
+            app.manage(AppState::new(paths));
             app.manage(TailStreams::new());
             app.manage(SystemStreams::new());
             app.manage(TerminalSessions::new());

@@ -1,23 +1,6 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ConnectionProfile {
-    pub(crate) id: String,
-    pub(crate) name: String,
-    pub(crate) host: String,
-    pub(crate) port: u16,
-    pub(crate) username: String,
-    pub(crate) group: String,
-    #[serde(default = "default_auth_kind")]
-    pub(crate) auth_kind: String,
-    #[serde(default)]
-    pub(crate) private_key_path: Option<String>,
-}
-
-fn default_auth_kind() -> String {
-    "privateKey".to_string()
-}
+pub(crate) use trace_deck_core::ConnectionProfile;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -78,30 +61,4 @@ pub(crate) struct RemoteSystemStatus {
 pub(crate) struct SystemStatusChunk {
     pub(crate) stream_id: u64,
     pub(crate) status: RemoteSystemStatus,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::ConnectionProfile;
-
-    #[test]
-    fn deserializes_legacy_profiles_and_serializes_camel_case_fields() {
-        let profile: ConnectionProfile = serde_json::from_str(
-            r#"{
-                "id":"prod",
-                "name":"Production",
-                "host":"prod.example.test",
-                "port":22,
-                "username":"deploy",
-                "group":"Production"
-            }"#,
-        )
-        .unwrap();
-        assert_eq!(profile.auth_kind, "privateKey");
-        assert!(profile.private_key_path.is_none());
-
-        let json = serde_json::to_value(profile).unwrap();
-        assert_eq!(json["authKind"], "privateKey");
-        assert!(json.get("privateKeyPath").is_some());
-    }
 }

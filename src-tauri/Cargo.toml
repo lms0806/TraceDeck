@@ -5,6 +5,10 @@ description = "Secure SSH terminal and log tracing desktop app"
 authors = ["TraceDeck"]
 edition = "2024"
 
+[workspace]
+members = ["core"]
+resolver = "3"
+
 [lib]
 name = "trace_deck_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
@@ -16,6 +20,7 @@ tauri-build = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 portable-pty = "0.9"
+trace-deck-core = { path = "core" }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-store = "2"

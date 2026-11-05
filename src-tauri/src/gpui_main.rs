@@ -8,6 +8,7 @@ use gpui::{
     Render, ScrollHandle, StatefulInteractiveElement, StyledText, Window, WindowBounds,
     WindowOptions, div, prelude::*, px, rgb, size,
 };
+use serde::{Deserialize, Serialize};
 use trace_deck_core::{
     AppPaths, ConnectionProfile, ProfileStore, RemoteEntry, RemoteSystemStatus, SystemStatusChunk,
     TailChunk, TerminalChunk, logs, sftp, system, terminal,
@@ -29,6 +30,7 @@ struct TraceDeckGpui {
     remote_entries: Vec<RemoteEntry>,
     known_hosts_file: std::path::PathBuf,
     profile_file: std::path::PathBuf,
+    workspace_file: std::path::PathBuf,
     notice: Option<String>,
     log_tabs: Vec<LogTab>,
     active_log_id: Option<u64>,
@@ -78,6 +80,26 @@ struct LogTab {
     path: String,
     content: String,
     tail_stream_id: Option<u64>,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+struct PersistedWorkspace {
+    selected_profile_id: Option<String>,
+    remote_path: String,
+    log_paths: Vec<String>,
+    active_log_path: Option<String>,
+    split_log_paths: Vec<String>,
+    active_bottom_panel: PersistedBottomPanel,
+    bottom_panel_height: f32,
+}
+
+#[derive(Clone, Copy, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum PersistedBottomPanel {
+    #[default]
+    Log,
+    Terminal,
 }
 
 #[derive(Clone)]
@@ -157,6 +179,7 @@ impl TraceDeckGpui {
 
     fn select_log_panel(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.active_bottom_panel = BottomPanel::Log;
+        self.save_workspace();
         cx.notify();
     }
 
@@ -167,6 +190,7 @@ impl TraceDeckGpui {
         cx: &mut Context<Self>,
     ) {
         self.active_bottom_panel = BottomPanel::Terminal;
+        self.save_workspace();
         cx.notify();
     }
 
@@ -179,6 +203,95 @@ impl TraceDeckGpui {
         let window_height = f32::from(window.bounds().size.height);
         let pointer_y = f32::from(event.event.position.y);
         self.bottom_panel_height = (window_height - pointer_y).clamp(160.0, 600.0);
+        self.save_workspace();
+        cx.notify();
+    }
+
+    fn save_workspace(&self) {
+        let active_log_path = self.active_log_id.and_then(|id| {
+            self.log_tabs
+                .iter()
+                .find(|tab| tab.id == id)
+                .map(|tab| tab.path.clone())
+        });
+        let workspace = PersistedWorkspace {
+            selected_profile_id: self.selected_profile_id.clone(),
+            remote_path: self.remote_path.clone(),
+            log_paths: self.log_tabs.iter().map(|tab| tab.path.clone()).collect(),
+            active_log_path,
+            split_log_paths: self
+                .split_log_ids
+                .iter()
+                .filter_map(|id| {
+                    self.log_tabs
+                        .iter()
+                        .find(|tab| tab.id == *id)
+                        .map(|tab| tab.path.clone())
+                })
+                .collect(),
+            active_bottom_panel: match self.active_bottom_panel {
+                BottomPanel::Log => PersistedBottomPanel::Log,
+                BottomPanel::Terminal => PersistedBottomPanel::Terminal,
+            },
+            bottom_panel_height: self.bottom_panel_height,
+        };
+        if let Ok(contents) = serde_json::to_vec_pretty(&workspace) {
+            let _ = std::fs::write(&self.workspace_file, contents);
+        }
+    }
+
+    fn restore_workspace(&mut self, workspace: PersistedWorkspace, cx: &mut Context<Self>) {
+        self.remote_path = valid_workspace_path(&workspace.remote_path);
+        self.bottom_panel_height = workspace.bottom_panel_height.clamp(160.0, 600.0);
+        self.active_bottom_panel = match workspace.active_bottom_panel {
+            PersistedBottomPanel::Log => BottomPanel::Log,
+            PersistedBottomPanel::Terminal => BottomPanel::Terminal,
+        };
+
+        let Some(profile_id) = workspace.selected_profile_id.filter(|id| {
+            self.profiles
+                .iter()
+                .any(|profile| profile.id.as_str() == id)
+        }) else {
+            self.save_workspace();
+            return;
+        };
+
+        self.selected_profile_id = Some(profile_id);
+        self.load_directory(self.remote_path.clone(), cx);
+        self.start_system_status_stream();
+
+        for path in workspace.log_paths {
+            self.open_log(path, cx);
+        }
+        self.active_log_id = workspace.active_log_path.and_then(|path| {
+            self.log_tabs
+                .iter()
+                .find(|tab| tab.path == path)
+                .map(|tab| tab.id)
+        });
+        self.split_log_ids = workspace
+            .split_log_paths
+            .iter()
+            .filter_map(|path| {
+                self.log_tabs
+                    .iter()
+                    .find(|tab| tab.path == *path)
+                    .map(|tab| tab.id)
+            })
+            .take(2)
+            .collect();
+        if self.split_log_ids.len() != 2 {
+            self.split_log_ids.clear();
+        }
+        if self.active_log_id.is_none() {
+            self.active_log_id = self.log_tabs.last().map(|tab| tab.id);
+        }
+        self.active_bottom_panel = match workspace.active_bottom_panel {
+            PersistedBottomPanel::Log => BottomPanel::Log,
+            PersistedBottomPanel::Terminal => BottomPanel::Terminal,
+        };
+        self.save_workspace();
         cx.notify();
     }
 
@@ -366,6 +479,7 @@ impl TraceDeckGpui {
         self.remote_status = None;
         self.load_directory("/".to_owned(), cx);
         self.start_system_status_stream();
+        self.save_workspace();
     }
 
     fn open_directory(&mut self, path: String, cx: &mut Context<Self>) {
@@ -381,6 +495,7 @@ impl TraceDeckGpui {
         self.split_log_ids.clear();
         self.remote_status = None;
         self.context_menu = None;
+        self.save_workspace();
         cx.notify();
     }
 
@@ -399,6 +514,7 @@ impl TraceDeckGpui {
                     self.remote_entries.clear();
                 }
                 self.profiles.retain(|profile| profile.id != profile_id);
+                self.save_workspace();
             }
             Err(error) => self.notice = Some(error),
         }
@@ -541,6 +657,7 @@ impl TraceDeckGpui {
                 self.notice = Some(error);
             }
         }
+        self.save_workspace();
         cx.notify();
     }
 
@@ -557,6 +674,7 @@ impl TraceDeckGpui {
         if let Some(existing) = self.log_tabs.iter().find(|tab| tab.path == path) {
             self.active_log_id = Some(existing.id);
             self.active_bottom_panel = BottomPanel::Log;
+            self.save_workspace();
             cx.notify();
             return;
         }
@@ -593,6 +711,7 @@ impl TraceDeckGpui {
             }
             Err(error) => self.notice = Some(error),
         }
+        self.save_workspace();
         cx.notify();
     }
 
@@ -623,6 +742,7 @@ impl TraceDeckGpui {
         self.active_log_id = Some(log_id);
         self.active_bottom_panel = BottomPanel::Log;
         self.log_scroll.scroll_to_bottom();
+        self.save_workspace();
         cx.notify();
     }
 
@@ -640,6 +760,7 @@ impl TraceDeckGpui {
         if self.split_log_ids.len() != 2 {
             self.split_log_ids.clear();
         }
+        self.save_workspace();
         cx.notify();
     }
 
@@ -655,6 +776,7 @@ impl TraceDeckGpui {
         {
             self.split_log_ids = vec![active_log_id, other.id];
         }
+        self.save_workspace();
         cx.notify();
     }
 
@@ -2067,6 +2189,8 @@ struct InitialState {
     profiles: Vec<ConnectionProfile>,
     known_hosts_file: std::path::PathBuf,
     profile_file: std::path::PathBuf,
+    workspace_file: std::path::PathBuf,
+    workspace: PersistedWorkspace,
 }
 
 fn profile_matches_search(profile: &ConnectionProfile, query: &str) -> bool {
@@ -2220,6 +2344,21 @@ impl LogDisplay {
 
 fn normalize_newlines(content: String) -> String {
     content.replace("\r\n", "\n").replace('\r', "\n")
+}
+
+fn valid_workspace_path(path: &str) -> String {
+    if path.starts_with('/') {
+        path.to_owned()
+    } else {
+        "/".to_owned()
+    }
+}
+
+fn load_workspace(path: &std::path::Path) -> PersistedWorkspace {
+    std::fs::read(path)
+        .ok()
+        .and_then(|contents| serde_json::from_slice(&contents).ok())
+        .unwrap_or_default()
 }
 
 fn file_name(path: &str) -> String {
@@ -2418,18 +2557,24 @@ fn initialize_core() -> InitialState {
     }) {
         Ok(paths) => {
             let store = ProfileStore::new(paths.profile_file());
+            let workspace_file = paths.data_dir().join("gpui-workspace.json");
+            let workspace = load_workspace(&workspace_file);
             match store.list() {
                 Ok(profiles) => InitialState {
                     core_status: format!("저장 세션 {}개를 불러왔습니다.", profiles.len()),
                     profiles,
                     known_hosts_file: paths.known_hosts_file(),
                     profile_file: paths.profile_file(),
+                    workspace_file,
+                    workspace,
                 },
                 Err(error) => InitialState {
                     core_status: format!("저장 세션을 읽지 못했습니다: {error}"),
                     profiles: Vec::new(),
                     known_hosts_file: paths.known_hosts_file(),
                     profile_file: paths.profile_file(),
+                    workspace_file,
+                    workspace,
                 },
             }
         }
@@ -2438,6 +2583,8 @@ fn initialize_core() -> InitialState {
             profiles: Vec::new(),
             known_hosts_file: std::path::PathBuf::new(),
             profile_file: std::path::PathBuf::new(),
+            workspace_file: std::path::PathBuf::new(),
+            workspace: PersistedWorkspace::default(),
         },
     }
 }
@@ -2457,6 +2604,7 @@ fn main() {
                 let session_form_focus = cx.focus_handle();
                 let server_search_focus = cx.focus_handle();
                 let file_action_focus = cx.focus_handle();
+                let workspace = initial_state.workspace.clone();
                 let view = cx.new(|_| TraceDeckGpui {
                     core_status: initial_state.core_status.clone(),
                     profiles: initial_state.profiles.clone(),
@@ -2465,6 +2613,7 @@ fn main() {
                     remote_entries: Vec::new(),
                     known_hosts_file: initial_state.known_hosts_file.clone(),
                     profile_file: initial_state.profile_file.clone(),
+                    workspace_file: initial_state.workspace_file.clone(),
                     notice: None,
                     log_tabs: Vec::new(),
                     active_log_id: None,
@@ -2506,6 +2655,7 @@ fn main() {
                         }
                     })
                     .detach();
+                view.update(cx, |this, cx| this.restore_workspace(workspace, cx));
                 view
             },
         )
@@ -2516,7 +2666,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{entry_metadata, normalize_newlines, parse_log_content};
+    use super::{entry_metadata, normalize_newlines, parse_log_content, valid_workspace_path};
 
     #[test]
     fn preserves_ansi_colors_and_normalizes_newlines() {
@@ -2537,5 +2687,12 @@ mod tests {
             entry_metadata("-rw-r--r-- 1 opc staff 5150 Oct 22 23:41 app.log").values(),
             ["-rw-r--r--", "opc", "staff", "5150", "Oct 22 23:41"].map(str::to_owned)
         );
+    }
+
+    #[test]
+    fn restores_only_absolute_remote_paths() {
+        assert_eq!(valid_workspace_path("/var/log/api"), "/var/log/api");
+        assert_eq!(valid_workspace_path("relative/path"), "/");
+        assert_eq!(valid_workspace_path(""), "/");
     }
 }

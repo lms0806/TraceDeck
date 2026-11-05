@@ -1,8 +1,8 @@
 use gpui::{
-    App, Application, Bounds, Context, Div, IntoElement, Render, Window, WindowBounds,
-    WindowOptions, div, prelude::*, px, rgb, size,
+    App, Application, Bounds, Context, Div, IntoElement, Render, StatefulInteractiveElement,
+    Window, WindowBounds, WindowOptions, div, prelude::*, px, rgb, size,
 };
-use trace_deck_core::AppPaths;
+use trace_deck_core::{AppPaths, ConnectionProfile, ProfileStore, RemoteEntry, sftp};
 
 const WINDOW_WIDTH: f32 = 1280.0;
 const WINDOW_HEIGHT: f32 = 800.0;
@@ -14,6 +14,12 @@ const ACCENT: u32 = 0x36c79a;
 
 struct TraceDeckGpui {
     core_status: String,
+    profiles: Vec<ConnectionProfile>,
+    selected_profile_id: Option<String>,
+    remote_path: String,
+    remote_entries: Vec<RemoteEntry>,
+    known_hosts_file: std::path::PathBuf,
+    notice: Option<String>,
     show_new_session_dialog: bool,
 }
 
@@ -26,6 +32,53 @@ impl TraceDeckGpui {
     fn close_new_session(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.show_new_session_dialog = false;
         cx.notify();
+    }
+
+    fn select_profile(&mut self, profile_id: String, cx: &mut Context<Self>) {
+        self.selected_profile_id = Some(profile_id);
+        self.load_directory("/".to_owned(), cx);
+    }
+
+    fn open_directory(&mut self, path: String, cx: &mut Context<Self>) {
+        self.load_directory(path, cx);
+    }
+
+    fn load_directory(&mut self, path: String, cx: &mut Context<Self>) {
+        let Some(profile) = self
+            .selected_profile_id
+            .as_ref()
+            .and_then(|id| self.profiles.iter().find(|profile| profile.id == *id))
+            .cloned()
+        else {
+            return;
+        };
+
+        self.notice = Some("원격 폴더를 불러오는 중입니다…".to_owned());
+        match sftp::list_directory(&profile, &path, &self.known_hosts_file) {
+            Ok(entries) => {
+                self.remote_path = path;
+                self.remote_entries = entries;
+                self.notice = None;
+            }
+            Err(error) => {
+                self.remote_entries.clear();
+                self.notice = Some(error);
+            }
+        }
+        cx.notify();
+    }
+
+    fn parent_directory(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+        let parent = self
+            .remote_path
+            .trim_end_matches('/')
+            .rsplit_once('/')
+            .map_or(
+                "/",
+                |(parent, _)| if parent.is_empty() { "/" } else { parent },
+            )
+            .to_owned();
+        self.load_directory(parent, cx);
     }
 
     fn header(&self, cx: &mut Context<Self>) -> Div {
@@ -117,17 +170,45 @@ impl TraceDeckGpui {
                             .on_click(cx.listener(Self::open_new_session)),
                     ),
             )
-            .child(
+            .children(self.profiles.iter().enumerate().map(|(index, profile)| {
+                let profile_id = profile.id.clone();
+                let active = self.selected_profile_id.as_deref() == Some(profile.id.as_str());
                 div()
+                    .id(("profile", index))
                     .mx(px(10.0))
+                    .mb(px(6.0))
+                    .cursor_pointer()
                     .rounded_md()
                     .border_1()
-                    .border_color(rgb(BORDER))
-                    .p(px(14.0))
-                    .text_sm()
-                    .text_color(rgb(MUTED_TEXT))
-                    .child("저장된 세션이 없습니다.\n새 세션을 추가해 연결 정보를 저장하세요."),
-            )
+                    .border_color(if active { rgb(ACCENT) } else { rgb(BORDER) })
+                    .bg(if active { rgb(0x1d4b43) } else { rgb(PANEL_BACKGROUND) })
+                    .p(px(12.0))
+                    .hover(|style| style.bg(rgb(0x263849)))
+                    .child(div().text_sm().text_color(gpui::white()).child(profile.name.clone()))
+                    .child(
+                        div()
+                            .mt(px(4.0))
+                            .text_xs()
+                            .text_color(rgb(MUTED_TEXT))
+                            .child(format!("{}@{}:{}", profile.username, profile.host, profile.port)),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.select_profile(profile_id.clone(), cx);
+                    }))
+            }))
+            .when(self.profiles.is_empty(), |sidebar| {
+                sidebar.child(
+                    div()
+                        .mx(px(10.0))
+                        .rounded_md()
+                        .border_1()
+                        .border_color(rgb(BORDER))
+                        .p(px(14.0))
+                        .text_sm()
+                        .text_color(rgb(MUTED_TEXT))
+                        .child("저장된 세션이 없습니다.\n기존 Tauri 앱에서 세션을 추가하면 여기에도 표시됩니다."),
+                )
+            })
             .child(
                 div()
                     .mt(px(18.0))
@@ -137,16 +218,21 @@ impl TraceDeckGpui {
                     .text_color(rgb(0x7fa4c3))
                     .child("OPEN SESSIONS"),
             )
-            .child(
-                div()
-                    .mx(px(10.0))
-                    .rounded_md()
-                    .border_1()
-                    .border_color(rgb(BORDER))
-                    .p(px(14.0))
-                    .text_sm()
-                    .text_color(rgb(MUTED_TEXT))
-                    .child("열린 세션이 없습니다."),
+            .children(
+                self.selected_profile_id
+                    .as_ref()
+                    .and_then(|id| self.profiles.iter().find(|profile| profile.id == *id))
+                    .map(|profile| {
+                        div()
+                            .mx(px(10.0))
+                            .rounded_md()
+                            .border_1()
+                            .border_color(rgb(ACCENT))
+                            .p(px(12.0))
+                            .text_sm()
+                            .text_color(gpui::white())
+                            .child(profile.name.clone())
+                    }),
             )
             .child(div().flex_1())
             .child(
@@ -161,7 +247,36 @@ impl TraceDeckGpui {
             )
     }
 
-    fn workspace(&self) -> Div {
+    fn workspace(&self, cx: &mut Context<Self>) -> Div {
+        let selected_profile = self
+            .selected_profile_id
+            .as_ref()
+            .and_then(|id| self.profiles.iter().find(|profile| profile.id == *id));
+        let content = match selected_profile {
+            Some(profile) => self.directory_browser(profile, cx),
+            None => div()
+                .flex_1()
+                .flex()
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .gap(px(10.0))
+                .child(div().text_xl().child("TraceDeck"))
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(MUTED_TEXT))
+                        .child("저장된 세션을 선택하거나 새 세션을 만들어 시작하세요."),
+                )
+                .child(
+                    div()
+                        .mt(px(12.0))
+                        .text_xs()
+                        .text_color(rgb(0x6e8497))
+                        .child(self.core_status.clone()),
+                ),
+        };
+
         div()
             .flex_1()
             .min_w_0()
@@ -190,29 +305,7 @@ impl TraceDeckGpui {
                             .child("▣  Home"),
                     ),
             )
-            .child(
-                div()
-                    .flex_1()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .justify_center()
-                    .gap(px(10.0))
-                    .child(div().text_xl().child("TraceDeck"))
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(rgb(MUTED_TEXT))
-                            .child("저장된 세션을 선택하거나 새 세션을 만들어 시작하세요."),
-                    )
-                    .child(
-                        div()
-                            .mt(px(12.0))
-                            .text_xs()
-                            .text_color(rgb(0x6e8497))
-                            .child(self.core_status.clone()),
-                    ),
-            )
+            .child(content)
             .child(
                 div()
                     .h(px(28.0))
@@ -228,6 +321,133 @@ impl TraceDeckGpui {
                     .child("CPU  —")
                     .child("DISK  —"),
             )
+    }
+
+    fn directory_browser(&self, profile: &ConnectionProfile, cx: &mut Context<Self>) -> Div {
+        let mut entries = div()
+            .id("remote-file-list")
+            .flex_1()
+            .flex()
+            .flex_col()
+            .overflow_y_scroll();
+        if self.remote_path != "/" {
+            entries = entries.child(
+                div()
+                    .id("parent-directory")
+                    .cursor_pointer()
+                    .flex()
+                    .items_center()
+                    .border_b_1()
+                    .border_color(rgb(BORDER))
+                    .px(px(18.0))
+                    .py(px(10.0))
+                    .text_sm()
+                    .text_color(rgb(MUTED_TEXT))
+                    .hover(|style| style.bg(rgb(0x1c2935)))
+                    .child("⌃  상위 폴더")
+                    .on_click(cx.listener(Self::parent_directory)),
+            );
+        }
+        for (index, entry) in self.remote_entries.iter().enumerate() {
+            let entry_path = entry.path.clone();
+            let entry_name = entry.name.clone();
+            let details = entry.details.clone();
+            let is_directory = entry.is_dir;
+            let row = div()
+                .id(("remote-entry", index))
+                .flex()
+                .items_center()
+                .gap(px(10.0))
+                .border_b_1()
+                .border_color(rgb(0x20303e))
+                .px(px(18.0))
+                .py(px(10.0))
+                .text_sm()
+                .hover(|style| style.bg(rgb(0x1c2935)))
+                .child(if is_directory { "▸" } else { "□" })
+                .child(div().text_color(gpui::white()).child(entry_name))
+                .child(
+                    div()
+                        .ml_auto()
+                        .text_xs()
+                        .text_color(rgb(MUTED_TEXT))
+                        .child(details),
+                );
+            entries = if is_directory {
+                entries.child(
+                    row.cursor_pointer()
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.open_directory(entry_path.clone(), cx);
+                        })),
+                )
+            } else {
+                entries.child(row)
+            };
+        }
+
+        div()
+            .flex_1()
+            .min_h_0()
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(12.0))
+                    .border_b_1()
+                    .border_color(rgb(BORDER))
+                    .px(px(18.0))
+                    .py(px(12.0))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.0))
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(gpui::white())
+                                    .child(profile.name.clone()),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(MUTED_TEXT))
+                                    .child(self.remote_path.clone()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("refresh-directory")
+                            .cursor_pointer()
+                            .rounded_md()
+                            .border_1()
+                            .border_color(rgb(0x40566b))
+                            .px(px(10.0))
+                            .py(px(6.0))
+                            .text_sm()
+                            .hover(|style| style.bg(rgb(0x263849)))
+                            .child("새로고침")
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                let path = this.remote_path.clone();
+                                this.open_directory(path, cx);
+                            })),
+                    ),
+            )
+            .children(self.notice.clone().map(|notice| {
+                div()
+                    .mx(px(18.0))
+                    .mt(px(12.0))
+                    .rounded_md()
+                    .bg(rgb(0x442d2d))
+                    .p(px(10.0))
+                    .text_sm()
+                    .text_color(rgb(0xffb4b4))
+                    .child(notice)
+            }))
+            .child(entries)
     }
 
     fn new_session_dialog(&self, cx: &mut Context<Self>) -> Div {
@@ -353,7 +573,7 @@ impl Render for TraceDeckGpui {
                     .min_h_0()
                     .flex()
                     .child(self.sidebar(cx))
-                    .child(self.workspace()),
+                    .child(self.workspace(cx)),
             );
 
         if self.show_new_session_dialog {
@@ -364,18 +584,42 @@ impl Render for TraceDeckGpui {
     }
 }
 
-fn initialize_core() -> String {
+struct InitialState {
+    core_status: String,
+    profiles: Vec<ConnectionProfile>,
+    known_hosts_file: std::path::PathBuf,
+}
+
+fn initialize_core() -> InitialState {
     match AppPaths::for_current_user().and_then(|paths| {
         paths.ensure_exists()?;
         Ok(paths)
     }) {
-        Ok(_) => "trace-deck-core 데이터 경로를 준비했습니다.".to_owned(),
-        Err(error) => format!("trace-deck-core 초기화 실패: {error}"),
+        Ok(paths) => {
+            let store = ProfileStore::new(paths.profile_file());
+            match store.list() {
+                Ok(profiles) => InitialState {
+                    core_status: format!("저장 세션 {}개를 불러왔습니다.", profiles.len()),
+                    profiles,
+                    known_hosts_file: paths.known_hosts_file(),
+                },
+                Err(error) => InitialState {
+                    core_status: format!("저장 세션을 읽지 못했습니다: {error}"),
+                    profiles: Vec::new(),
+                    known_hosts_file: paths.known_hosts_file(),
+                },
+            }
+        }
+        Err(error) => InitialState {
+            core_status: format!("trace-deck-core 초기화 실패: {error}"),
+            profiles: Vec::new(),
+            known_hosts_file: std::path::PathBuf::new(),
+        },
     }
 }
 
 fn main() {
-    let core_status = initialize_core();
+    let initial_state = initialize_core();
     Application::new().run(move |cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)), cx);
         cx.open_window(
@@ -385,7 +629,13 @@ fn main() {
             },
             |_, cx| {
                 cx.new(|_| TraceDeckGpui {
-                    core_status: core_status.clone(),
+                    core_status: initial_state.core_status.clone(),
+                    profiles: initial_state.profiles.clone(),
+                    selected_profile_id: None,
+                    remote_path: "/".to_owned(),
+                    remote_entries: Vec::new(),
+                    known_hosts_file: initial_state.known_hosts_file.clone(),
+                    notice: None,
                     show_new_session_dialog: false,
                 })
             },

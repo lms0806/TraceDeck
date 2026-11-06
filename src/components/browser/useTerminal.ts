@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import type { Profile, TerminalChunk } from "./types";
 
 const initialOutput = "원격 터미널에 연결하는 중…\n";
+const maxOutputLength = 100_000;
 
 export interface TerminalState {
   clear: () => void;
@@ -28,6 +29,7 @@ export function useTerminalTabs(profile: Profile, shouldConnect: boolean) {
   const [activeKey, setActiveKey] = useState<number | null>(null);
   const sessionsRef = useRef<TerminalTab[]>([]);
   const bufferedOutput = useRef(new Map<number, string>());
+  const terminalKeys = useRef(new Map<number, number>());
   const nextKey = useRef(1);
   const previouslyVisible = useRef(false);
 
@@ -38,25 +40,23 @@ export function useTerminalTabs(profile: Profile, shouldConnect: boolean) {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     void listen<TerminalChunk>("terminal-chunk", (event) => {
-      const matching = sessionsRef.current.find(
-        (session) => session.terminalId === event.payload.terminalId,
-      );
-      if (matching === undefined) {
+      const key = terminalKeys.current.get(event.payload.terminalId);
+      if (key === undefined) {
         const previous =
           bufferedOutput.current.get(event.payload.terminalId) ?? "";
         bufferedOutput.current.set(
           event.payload.terminalId,
-          `${previous}${event.payload.chunk}`.slice(-100_000),
+          `${previous}${event.payload.chunk}`.slice(-maxOutputLength),
         );
         return;
       }
       setSessions((current) =>
         current.map((session) =>
-          session.key === matching.key
+          session.key === key
             ? {
                 ...session,
                 output: `${session.output}${event.payload.chunk}`.slice(
-                  -100_000,
+                  -maxOutputLength,
                 ),
               }
             : session,
@@ -68,6 +68,27 @@ export function useTerminalTabs(profile: Profile, shouldConnect: boolean) {
     return () => unlisten?.();
   }, []);
 
+  const attachTerminal = useCallback((key: number, terminalId: number) => {
+    terminalKeys.current.set(terminalId, key);
+    const buffered = bufferedOutput.current.get(terminalId);
+    if (buffered !== undefined) bufferedOutput.current.delete(terminalId);
+    setSessions((current) =>
+      current.map((session) =>
+        session.key === key
+          ? {
+              ...session,
+              terminalId,
+              output:
+                buffered === undefined
+                  ? session.output
+                  : `${session.output}${buffered}`.slice(-maxOutputLength),
+              starting: false,
+            }
+          : session,
+      ),
+    );
+  }, []);
+
   const addTerminal = useCallback(() => {
     const key = nextKey.current++;
     setSessions((current) => [
@@ -76,25 +97,7 @@ export function useTerminalTabs(profile: Profile, shouldConnect: boolean) {
     ]);
     setActiveKey(key);
     void invoke<number>("start_terminal", { profile })
-      .then((terminalId) => {
-        const buffered = bufferedOutput.current.get(terminalId);
-        if (buffered !== undefined) bufferedOutput.current.delete(terminalId);
-        setSessions((current) =>
-          current.map((session) =>
-            session.key === key
-              ? {
-                  ...session,
-                  terminalId,
-                  output:
-                    buffered === undefined
-                      ? session.output
-                      : `${session.output}${buffered}`,
-                  starting: false,
-                }
-              : session,
-          ),
-        );
-      })
+      .then((terminalId) => attachTerminal(key, terminalId))
       .catch((error) => {
         setSessions((current) =>
           current.map((session) =>
@@ -108,7 +111,7 @@ export function useTerminalTabs(profile: Profile, shouldConnect: boolean) {
           ),
         );
       });
-  }, [profile]);
+  }, [attachTerminal, profile]);
 
   useEffect(() => {
     if (
@@ -122,10 +125,8 @@ export function useTerminalTabs(profile: Profile, shouldConnect: boolean) {
 
   useEffect(
     () => () => {
-      for (const session of sessionsRef.current) {
-        if (session.terminalId !== null)
-          void invoke("stop_terminal", { terminalId: session.terminalId });
-      }
+      for (const terminalId of terminalKeys.current.keys())
+        void invoke("stop_terminal", { terminalId });
     },
     [],
   );
@@ -150,8 +151,10 @@ export function useTerminalTabs(profile: Profile, shouldConnect: boolean) {
             ?.key ?? null)
         : active,
     );
-    if (removed?.terminalId !== null && removed !== undefined)
+    if (removed?.terminalId !== null && removed !== undefined) {
+      terminalKeys.current.delete(removed.terminalId);
       void invoke("stop_terminal", { terminalId: removed.terminalId });
+    }
   }, []);
 
   const terminalFor = useCallback(
@@ -168,8 +171,10 @@ export function useTerminalTabs(profile: Profile, shouldConnect: boolean) {
           const terminalId = sessionsRef.current.find(
             (item) => item.key === key,
           )?.terminalId;
-          if (terminalId !== null && terminalId !== undefined)
+          if (terminalId !== null && terminalId !== undefined) {
+            terminalKeys.current.delete(terminalId);
             void invoke("stop_terminal", { terminalId });
+          }
           updateSession(key, (current) => ({
             ...current,
             terminalId: null,
@@ -177,13 +182,7 @@ export function useTerminalTabs(profile: Profile, shouldConnect: boolean) {
             starting: true,
           }));
           void invoke<number>("start_terminal", { profile })
-            .then((terminalId) =>
-              updateSession(key, (current) => ({
-                ...current,
-                terminalId,
-                starting: false,
-              })),
-            )
+            .then((terminalId) => attachTerminal(key, terminalId))
             .catch((error) =>
               updateSession(key, (current) => ({
                 ...current,
@@ -216,7 +215,7 @@ export function useTerminalTabs(profile: Profile, shouldConnect: boolean) {
         },
       };
     },
-    [profile, sessions, updateSession],
+    [attachTerminal, profile, sessions, updateSession],
   );
 
   return {

@@ -71,13 +71,17 @@ function AnsiLogContent({ content }: { content: string }) {
 function LogPreview({ log }: { log: LogTab }) {
   const previewScroll = useRef<HTMLPreElement>(null);
   const stickToBottom = useRef(true);
+  const autoScrolling = useRef(false);
 
   useLayoutEffect(() => {
     if (!stickToBottom.current) return;
+    const element = previewScroll.current;
+    if (!element) return;
+    autoScrolling.current = true;
+    element.scrollTop = element.scrollHeight;
     const frame = requestAnimationFrame(() => {
-      const element = previewScroll.current;
-      if (element && stickToBottom.current)
-        element.scrollTop = element.scrollHeight;
+      if (stickToBottom.current) element.scrollTop = element.scrollHeight;
+      autoScrolling.current = false;
     });
     return () => cancelAnimationFrame(frame);
   }, [log.content]);
@@ -91,6 +95,7 @@ function LogPreview({ log }: { log: LogTab }) {
         className="m-0 min-h-0 flex-1 overflow-auto p-[12px_16px] font-mono text-xs leading-[1.55] whitespace-pre-wrap text-[#d0e0ec]"
         ref={previewScroll}
         onScroll={(event) => {
+          if (autoScrolling.current) return;
           const element = event.currentTarget;
           stickToBottom.current =
             element.scrollHeight - element.scrollTop - element.clientHeight <
@@ -313,12 +318,12 @@ export function LogDock({
       </header>
       {splitLogs?.length === 2 ? (
         <div className="flex min-h-0 flex-1">
-          <LogPreview log={splitLogs[0]} />
+          <LogPreview key={splitLogs[0].id} log={splitLogs[0]} />
           <div className="w-px shrink-0 bg-[#3a5264]" />
-          <LogPreview log={splitLogs[1]} />
+          <LogPreview key={splitLogs[1].id} log={splitLogs[1]} />
         </div>
       ) : (
-        <LogPreview log={preview} />
+        <LogPreview key={preview.id} log={preview} />
       )}
       {dropSide && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 top-[46px] flex bg-[#0b171ed9] p-3">

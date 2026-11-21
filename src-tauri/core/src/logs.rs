@@ -8,7 +8,6 @@ use std::{
         atomic::{AtomicU64, Ordering},
     },
     thread,
-    time::Duration,
 };
 
 use serde::Serialize;
@@ -143,7 +142,7 @@ where
     let mut command = ssh_command(profile, known_hosts_file)?;
     command
         .arg(format!(
-            "tail -n 0 -F -- \"{}\"",
+            "tail -n 100 -F -- \"{}\"",
             escape_remote_shell_path(path)
         ))
         .stdout(Stdio::piped())
@@ -162,7 +161,6 @@ where
         .map_err(|_| "로그 스트림 상태를 잠글 수 없습니다.")?
         .insert(stream_id, child);
     thread::spawn(move || {
-        thread::sleep(Duration::from_millis(200));
         for line in BufReader::new(stdout).lines() {
             match line {
                 Ok(line) => emit(TailChunk {

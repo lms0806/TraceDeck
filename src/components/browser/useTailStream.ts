@@ -13,6 +13,8 @@ export function useTailStream(profile: Profile) {
   const [logs, setLogs] = useState<LogTab[]>([]);
   const [activeLogId, setActiveLogId] = useState<string | null>(null);
   const logsRef = useRef<LogTab[]>([]);
+  const streamLogs = useRef(new Map<number, string>());
+  const bufferedChunks = useRef(new Map<number, string>());
 
   useEffect(() => {
     logsRef.current = logs;
@@ -21,9 +23,19 @@ export function useTailStream(profile: Profile) {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     void listen<TailChunk>("tail-chunk", (event) => {
+      const logId = streamLogs.current.get(event.payload.streamId);
+      if (logId === undefined) {
+        const previous =
+          bufferedChunks.current.get(event.payload.streamId) ?? "";
+        bufferedChunks.current.set(
+          event.payload.streamId,
+          `${previous}${event.payload.chunk}`.slice(-100_000),
+        );
+        return;
+      }
       setLogs((current) =>
         current.map((log) => {
-          if (log.streamId !== event.payload.streamId) return log;
+          if (log.id !== logId) return log;
           const lines = `${log.content}${event.payload.chunk}`.split("\n");
           return { ...log, content: lines.slice(-2_000).join("\n") };
         }),
@@ -36,10 +48,8 @@ export function useTailStream(profile: Profile) {
 
   useEffect(
     () => () => {
-      for (const log of logsRef.current) {
-        if (log.streamId !== null)
-          void invoke("stop_tail_stream", { streamId: log.streamId });
-      }
+      for (const streamId of streamLogs.current.keys())
+        void invoke("stop_tail_stream", { streamId });
     },
     [],
   );
@@ -63,13 +73,6 @@ export function useTailStream(profile: Profile) {
     setLogs((current) => [...current, loadingTab]);
     setActiveLogId(id);
     try {
-      const initial = await invoke<RemoteFile>("read_remote_file", {
-        profile,
-        path: entry.path,
-      });
-      setLogs((current) =>
-        current.map((log) => (log.id === id ? { ...log, ...initial } : log)),
-      );
       const streamId = await invoke<number>("start_tail_stream", {
         profile,
         path: entry.path,
@@ -78,8 +81,19 @@ export function useTailStream(profile: Profile) {
         void invoke("stop_tail_stream", { streamId });
         return;
       }
+      streamLogs.current.set(streamId, id);
+      const buffered = bufferedChunks.current.get(streamId) ?? "";
+      bufferedChunks.current.delete(streamId);
       setLogs((current) =>
-        current.map((log) => (log.id === id ? { ...log, streamId } : log)),
+        current.map((log) => {
+          if (log.id !== id) return log;
+          const lines = buffered.split("\n");
+          return {
+            ...log,
+            content: lines.slice(-2_000).join("\n"),
+            streamId,
+          };
+        }),
       );
     } catch (error) {
       setLogs((current) =>
@@ -99,8 +113,15 @@ export function useTailStream(profile: Profile) {
     const index = logsRef.current.findIndex((log) => log.id === id);
     if (index === -1) return;
     const log = logsRef.current[index];
-    if (log.streamId !== null)
-      void invoke("stop_tail_stream", { streamId: log.streamId });
+    const streamId =
+      log.streamId ??
+      [...streamLogs.current].find(([, logId]) => logId === id)?.[0] ??
+      null;
+    if (streamId !== null) {
+      streamLogs.current.delete(streamId);
+      bufferedChunks.current.delete(streamId);
+      void invoke("stop_tail_stream", { streamId });
+    }
     const remaining = logsRef.current.filter((item) => item.id !== id);
     logsRef.current = remaining;
     setLogs(remaining);

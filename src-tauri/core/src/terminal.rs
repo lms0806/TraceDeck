@@ -132,7 +132,7 @@ fn start_terminal_process(
 
 pub fn write_terminal(
     terminal_id: u64,
-    input: String,
+    input: &str,
     sessions: &TerminalSessions,
 ) -> Result<(), String> {
     if input.len() > 16 * 1024 {

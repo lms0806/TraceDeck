@@ -145,6 +145,8 @@ fn hide_console_window(_command: &mut Command) {}
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use std::path::Path;
 
     use super::{

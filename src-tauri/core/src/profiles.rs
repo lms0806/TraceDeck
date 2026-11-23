@@ -120,6 +120,8 @@ fn restrict_profile_file_on_windows(_path: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use std::{
         fs,
         time::{SystemTime, UNIX_EPOCH},

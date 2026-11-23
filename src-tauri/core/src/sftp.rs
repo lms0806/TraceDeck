@@ -69,7 +69,7 @@ pub fn delete_entry(
     run_sftp_batch(
         profile,
         known_hosts_file,
-        format!("{command} \"{}\"\nquit\n", escape_remote_shell_path(path)),
+        &format!("{command} \"{}\"\nquit\n", escape_remote_shell_path(path)),
         "원격 항목을 삭제하지 못했습니다.",
     )
 }
@@ -87,7 +87,7 @@ pub fn rename_entry(
     run_sftp_batch(
         profile,
         known_hosts_file,
-        format!(
+        &format!(
             "rename \"{}\" \"{}\"\nquit\n",
             escape_remote_shell_path(path),
             escape_remote_shell_path(&destination)
@@ -109,7 +109,7 @@ pub fn create_directory(
     run_sftp_batch(
         profile,
         known_hosts_file,
-        format!("mkdir \"{}\"\nquit\n", escape_remote_shell_path(&path)),
+        &format!("mkdir \"{}\"\nquit\n", escape_remote_shell_path(&path)),
         "원격 폴더를 생성하지 못했습니다.",
     )
 }
@@ -142,7 +142,7 @@ pub fn create_empty_file(
 fn run_sftp_batch(
     profile: &ConnectionProfile,
     known_hosts_file: &Path,
-    batch: String,
+    batch: &str,
     fallback_message: &str,
 ) -> Result<(), String> {
     let mut command = sftp_command(profile, known_hosts_file)?;

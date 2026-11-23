@@ -161,6 +161,8 @@ fn parse_status_line(line: &str) -> Result<RemoteSystemStatus, String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::parse_status_line;
 
     #[test]

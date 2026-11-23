@@ -62,7 +62,7 @@ pub(crate) fn write_terminal(
     input: String,
     sessions: State<'_, TerminalSessions>,
 ) -> Result<(), String> {
-    terminal::write_terminal(terminal_id, input, &sessions)
+    terminal::write_terminal(terminal_id, &input, &sessions)
 }
 
 #[tauri::command]

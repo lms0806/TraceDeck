@@ -8,25 +8,34 @@ export default defineConfig({
     "unlisted",
     "binaries",
     "unresolved",
+    "catalog",
+    "catalogReferences",
     "exports",
+    "nsExports",
     "types",
+    "nsTypes",
+    "enumMembers",
+    "namespaceMembers",
     "duplicates",
     "files",
     "cycles",
   ],
+  includeEntryExports: true,
   treatConfigHintsAsErrors: true,
   treatTagHintsAsErrors: true,
   rules: {
     cycles: "error",
     exports: "error",
   },
-  // These packages are loaded by Vite's CSS/module pipeline or initialized by
-  // Tauri's runtime bridge, which Knip does not fully attribute to the React
-  // component import graph.
+  ignoreExportsUsedInFile: {
+    type: true,
+    interface: true,
+  },
+  // Knip does not attribute these runtime/CSS-backed imports to the final
+  // Tauri entry graph, although workspace.ts and TerminalDock.tsx use them.
   ignoreDependencies: [
-    "tailwindcss",
-    "@xterm/xterm",
-    "@xterm/addon-fit",
     "@tauri-apps/plugin-store",
+    "@xterm/addon-fit",
+    "@xterm/xterm",
   ],
 });

@@ -1,11 +1,10 @@
 import { Terminal } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 import { FileList } from "./browser/FileList";
 import { LogDock } from "./browser/LogDock";
 import { RemoteStatus } from "./browser/RemoteStatus";
-import { TerminalDock } from "./browser/TerminalDock";
 import type { Profile } from "./browser/types";
 import type { BrowserWorkspace } from "../app/workspace";
 import { useRemoteDirectory } from "./browser/useRemoteDirectory";
@@ -13,6 +12,20 @@ import { useTailStream } from "./browser/useTailStream";
 import { useTerminalTabs } from "./browser/useTerminal";
 import { PrimaryButton } from "./ui/PrimaryButton";
 import { SecondaryButton } from "./ui/SecondaryButton";
+
+const TerminalDock = lazy(() =>
+  import("./browser/TerminalDock").then(({ TerminalDock }) => ({
+    default: TerminalDock,
+  })),
+);
+
+function TerminalLoading() {
+  return (
+    <div className="flex min-h-[150px] flex-1 items-center justify-center bg-[#0d141b] text-xs text-[#89a1b2]">
+      터미널을 불러오는 중…
+    </div>
+  );
+}
 
 export function Browser({
   profile,
@@ -176,17 +189,19 @@ export function Browser({
       {view === "terminal" ? (
         terminal === undefined ? null : (
           <div className="flex min-h-0 flex-1 flex-col">
-            <TerminalDock
-              key={terminals.activeKey}
-              terminal={terminal}
-              expanded
-              onClose={() => setView("files")}
-              terminalTabs={terminals.sessions}
-              activeTerminalKey={terminals.activeKey}
-              onSelectTerminal={terminals.setActiveKey}
-              onAddTerminal={terminals.addTerminal}
-              onCloseTerminal={closeTerminal}
-            />
+            <Suspense fallback={<TerminalLoading />}>
+              <TerminalDock
+                key={terminals.activeKey}
+                terminal={terminal}
+                expanded
+                onClose={() => setView("files")}
+                terminalTabs={terminals.sessions}
+                activeTerminalKey={terminals.activeKey}
+                onSelectTerminal={terminals.setActiveKey}
+                onAddTerminal={terminals.addTerminal}
+                onCloseTerminal={closeTerminal}
+              />
+            </Suspense>
           </div>
         )
       ) : (
@@ -238,24 +253,28 @@ export function Browser({
           />
           {showTerminalDock && terminal !== undefined ? (
             <div className="flex min-h-0 flex-col">
-              <TerminalDock
-                key={terminals.activeKey}
-                terminal={terminal}
-                onClose={() => setShowTerminalDock(false)}
-                logPath={tail.activeLog?.path}
-                logTabLabel={logTabLabel}
-                isLogSplit={hasLogSplit}
-                height={dockHeight}
-                onHeightChange={setDockHeight}
-                onShowLog={
-                  tail.activeLog ? () => setShowTerminalDock(false) : undefined
-                }
-                terminalTabs={terminals.sessions}
-                activeTerminalKey={terminals.activeKey}
-                onSelectTerminal={terminals.setActiveKey}
-                onAddTerminal={terminals.addTerminal}
-                onCloseTerminal={closeTerminal}
-              />
+              <Suspense fallback={<TerminalLoading />}>
+                <TerminalDock
+                  key={terminals.activeKey}
+                  terminal={terminal}
+                  onClose={() => setShowTerminalDock(false)}
+                  logPath={tail.activeLog?.path}
+                  logTabLabel={logTabLabel}
+                  isLogSplit={hasLogSplit}
+                  height={dockHeight}
+                  onHeightChange={setDockHeight}
+                  onShowLog={
+                    tail.activeLog
+                      ? () => setShowTerminalDock(false)
+                      : undefined
+                  }
+                  terminalTabs={terminals.sessions}
+                  activeTerminalKey={terminals.activeKey}
+                  onSelectTerminal={terminals.setActiveKey}
+                  onAddTerminal={terminals.addTerminal}
+                  onCloseTerminal={closeTerminal}
+                />
+              </Suspense>
             </div>
           ) : tail.activeLog ? (
             <LogDock

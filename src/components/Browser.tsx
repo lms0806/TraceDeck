@@ -265,6 +265,7 @@ export function Browser({
               onCloseLog={tail.closeLog}
               onSelectLog={tail.setActiveLogId}
               onSplitLogIdsChange={setSplitLogIds}
+              onPopoutLog={(id) => void tail.popoutLog(id)}
               onOpenTerminal={() => setShowTerminalDock(true)}
               height={dockHeight}
               onHeightChange={setDockHeight}

@@ -6,6 +6,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { CircleDot, FolderOpen, KeyRound, Plus, X } from "lucide-react";
 import "./styles.css";
 import { Browser } from "./components/Browser";
+import { LogPopup } from "./components/browser/LogPopup";
 import { Sidebar } from "./components/app/Sidebar";
 import { TabBar } from "./components/app/TabBar";
 import { Panel } from "./components/ui/Panel";
@@ -698,4 +699,9 @@ function SessionDialog({
 }
 const root = document.getElementById("root");
 if (!root) throw new Error("#root를 찾지 못했습니다.");
-createRoot(root).render(<App />);
+const logPopupLabel = new URLSearchParams(window.location.search).get(
+  "logPopup",
+);
+createRoot(root).render(
+  logPopupLabel !== null ? <LogPopup label={logPopupLabel} /> : <App />,
+);

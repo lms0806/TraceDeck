@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emitTo, listen } from "@tauri-apps/api/event";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 
+import type { LogPopupSnapshot } from "./LogPopup";
 import type { Profile, RemoteEntry, RemoteFile, TailChunk } from "./types";
 
 export interface LogTab extends RemoteFile {
@@ -15,6 +17,7 @@ export function useTailStream(profile: Profile) {
   const logsRef = useRef<LogTab[]>([]);
   const streamLogs = useRef(new Map<number, string>());
   const bufferedChunks = useRef(new Map<number, string>());
+  const popupLabels = useRef(new Map<string, string>());
 
   useEffect(() => {
     logsRef.current = logs;
@@ -40,6 +43,31 @@ export function useTailStream(profile: Profile) {
           return { ...log, content: lines.slice(-2_000).join("\n") };
         }),
       );
+      const popupLabel = popupLabels.current.get(logId);
+      if (popupLabel !== undefined)
+        void emitTo(popupLabel, "log-popup-chunk", {
+          chunk: event.payload.chunk,
+        });
+    }).then((stop) => {
+      unlisten = stop;
+    });
+    return () => unlisten?.();
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<{ label: string }>("log-popup-ready", (event) => {
+      const entry = [...popupLabels.current.entries()].find(
+        ([, label]) => label === event.payload.label,
+      );
+      if (!entry) return;
+      const log = logsRef.current.find((item) => item.id === entry[0]);
+      if (!log) return;
+      const snapshot: LogPopupSnapshot = {
+        path: log.path,
+        content: log.content,
+      };
+      void emitTo(event.payload.label, "log-popup-snapshot", snapshot);
     }).then((stop) => {
       unlisten = stop;
     });
@@ -50,6 +78,8 @@ export function useTailStream(profile: Profile) {
     () => () => {
       for (const streamId of streamLogs.current.keys())
         void invoke("stop_tail_stream", { streamId });
+      for (const label of popupLabels.current.values())
+        void WebviewWindow.getByLabel(label).then((window) => window?.close());
     },
     [],
   );
@@ -122,6 +152,13 @@ export function useTailStream(profile: Profile) {
       bufferedChunks.current.delete(streamId);
       void invoke("stop_tail_stream", { streamId });
     }
+    const popupLabel = popupLabels.current.get(id);
+    if (popupLabel !== undefined) {
+      popupLabels.current.delete(id);
+      void WebviewWindow.getByLabel(popupLabel).then((window) =>
+        window?.close(),
+      );
+    }
     const remaining = logsRef.current.filter((item) => item.id !== id);
     logsRef.current = remaining;
     setLogs(remaining);
@@ -131,6 +168,47 @@ export function useTailStream(profile: Profile) {
     }
   }
 
+  async function popoutLog(id: string) {
+    const log = logsRef.current.find((item) => item.id === id);
+    if (!log) return;
+
+    const existingLabel = popupLabels.current.get(id);
+    if (existingLabel !== undefined) {
+      const existing = await WebviewWindow.getByLabel(existingLabel);
+      if (existing) {
+        await existing.setFocus();
+        return;
+      }
+      popupLabels.current.delete(id);
+    }
+
+    const label = `log-${crypto.randomUUID()}`;
+    popupLabels.current.set(id, label);
+    const filename = log.path.split("/").pop() ?? log.path;
+    const popup = new WebviewWindow(label, {
+      url: `index.html?logPopup=${encodeURIComponent(label)}`,
+      title: `TraceDeck - ${filename}`,
+      width: 1_000,
+      height: 700,
+      minWidth: 600,
+      minHeight: 400,
+    });
+    void popup.once("tauri://error", () => {
+      if (popupLabels.current.get(id) === label) popupLabels.current.delete(id);
+    });
+    void popup.once("tauri://destroyed", () => {
+      if (popupLabels.current.get(id) === label) popupLabels.current.delete(id);
+    });
+  }
+
   const activeLog = logs.find((log) => log.id === activeLogId) ?? null;
-  return { activeLog, activeLogId, closeLog, logs, openFile, setActiveLogId };
+  return {
+    activeLog,
+    activeLogId,
+    closeLog,
+    logs,
+    openFile,
+    popoutLog,
+    setActiveLogId,
+  };
 }

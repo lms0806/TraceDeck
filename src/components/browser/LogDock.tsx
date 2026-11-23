@@ -1,7 +1,8 @@
 import type { CSSProperties } from "react";
 import { useLayoutEffect, useRef, useState, type PointerEvent } from "react";
-import { Columns2, File, X } from "lucide-react";
+import { Columns2, ExternalLink, File, X } from "lucide-react";
 
+import { IconButton } from "../ui/IconButton";
 import type { LogTab } from "./useTailStream";
 
 const ansiPalette: Record<number, string> = {
@@ -23,7 +24,7 @@ const ansiPalette: Record<number, string> = {
   97: "#ffffff",
 };
 
-function AnsiLogContent({ content }: { content: string }) {
+export function AnsiLogContent({ content }: { content: string }) {
   return (
     <>
       {content.split("\n").map((line, lineIndex) => {
@@ -115,6 +116,7 @@ export function LogDock({
   onCloseLog,
   onSelectLog,
   onSplitLogIdsChange,
+  onPopoutLog,
   onOpenTerminal,
   height,
   onHeightChange,
@@ -125,6 +127,7 @@ export function LogDock({
   onCloseLog: (id: string) => void;
   onSelectLog: (id: string) => void;
   onSplitLogIdsChange: (ids: [string, string] | null) => void;
+  onPopoutLog: (id: string) => void;
   onOpenTerminal: () => void;
   height: number;
   onHeightChange: (height: number) => void;
@@ -314,7 +317,15 @@ export function LogDock({
             터미널
           </button>
         </div>
-        <div className="flex items-center gap-1" />
+        <div className="flex items-center gap-1">
+          <IconButton
+            aria-label="현재 로그를 새 창으로 열기"
+            onClick={() => onPopoutLog(preview.id)}
+            title="새 창으로 열기"
+          >
+            <ExternalLink size={16} />
+          </IconButton>
+        </div>
       </header>
       {splitLogs?.length === 2 ? (
         <div className="flex min-h-0 flex-1">

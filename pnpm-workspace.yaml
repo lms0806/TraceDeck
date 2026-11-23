@@ -4,7 +4,7 @@ overrides:
   minimatch: ^11.0.3
 
 minimumReleaseAgeExclude:
-  - knip@6.44.0
+  - knip@6.44.0 || 6.48.0
   - lucide-react@1.64.0 || 1.65.0 || 1.69.0 || 1.78.0
   - eslint@10.14.0
   - vite@8.3.6

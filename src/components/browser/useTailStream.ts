@@ -43,11 +43,6 @@ export function useTailStream(profile: Profile) {
           return { ...log, content: lines.slice(-2_000).join("\n") };
         }),
       );
-      const popupLabel = popupLabels.current.get(logId);
-      if (popupLabel !== undefined)
-        void emitTo(popupLabel, "log-popup-chunk", {
-          chunk: event.payload.chunk,
-        });
     }).then((stop) => {
       unlisten = stop;
     });
@@ -66,20 +61,19 @@ export function useTailStream(profile: Profile) {
       const snapshot: LogPopupSnapshot = {
         path: log.path,
         content: log.content,
+        profile,
       };
       void emitTo(event.payload.label, "log-popup-snapshot", snapshot);
     }).then((stop) => {
       unlisten = stop;
     });
     return () => unlisten?.();
-  }, []);
+  }, [profile]);
 
   useEffect(
     () => () => {
       for (const streamId of streamLogs.current.keys())
         void invoke("stop_tail_stream", { streamId });
-      for (const label of popupLabels.current.values())
-        void WebviewWindow.getByLabel(label).then((window) => window?.close());
     },
     [],
   );

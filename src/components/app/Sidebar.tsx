@@ -6,6 +6,7 @@ import {
   MonitorCog,
   Search,
   Server,
+  Trash2,
   X,
 } from "lucide-react";
 
@@ -85,8 +86,9 @@ export function Sidebar({
               className="invisible border-0 bg-transparent p-1.5 text-[#8ca1b1] group-hover:visible group-focus-within:visible hover:rounded hover:bg-[#41272a] hover:text-[#ff9b94]"
               onClick={() => onRemoveProfile(profile)}
               aria-label={`${profile.name} 저장 세션 삭제`}
+              title="저장 세션 삭제"
             >
-              <X size={14} />
+              <Trash2 aria-hidden="true" size={14} />
             </button>
           </div>
         ))}

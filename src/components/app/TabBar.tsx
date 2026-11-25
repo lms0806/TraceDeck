@@ -56,11 +56,11 @@ export function TabBar({
           onPointerCancel={endDrag}
         >
           {tab.profileId !== undefined ? (
-            <FolderOpen size={15} />
+            <FolderOpen size={16} />
           ) : tab.id === "analysis" ? (
-            <ChartNoAxesCombined size={15} />
+            <ChartNoAxesCombined size={16} />
           ) : (
-            <MonitorCog size={15} />
+            <MonitorCog size={16} />
           )}
           {tab.title}
           {tab.id !== "home" && (

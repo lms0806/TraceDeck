@@ -232,7 +232,7 @@ export function Browser({
               {directory.loading ? "불러오는 중…" : "폴더 열기"}
             </PrimaryButton>
             <SecondaryButton onClick={() => setShowTerminalDock(true)}>
-              <Terminal size={15} /> 하단 터미널
+              <Terminal size={16} /> 하단 터미널
             </SecondaryButton>
           </div>
           <FileList

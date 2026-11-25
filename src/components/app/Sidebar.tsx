@@ -42,7 +42,7 @@ export function Sidebar({
   return (
     <aside className="row-start-2 flex min-h-0 flex-col border-r border-[#293846] bg-[#151e28] px-2.5 py-[14px]">
       <label className="flex h-8 items-center gap-[7px] rounded border border-[#3a4d60] px-2 text-[#8fa5b8]">
-        <Search size={15} />
+        <Search size={16} />
         <input
           className="min-w-0 w-full border-0 bg-transparent text-xs text-[#e6eef6] outline-none"
           value={query}
@@ -58,7 +58,7 @@ export function Sidebar({
           onClick={onNewSession}
           title="새 세션 만들기"
         >
-          <AppWindowPlus aria-hidden="true" size={15} />
+          <AppWindowPlus aria-hidden="true" size={16} />
         </button>
       </div>
       <div className="overflow-auto">
@@ -73,7 +73,7 @@ export function Sidebar({
               onClick={() => onOpenProfile(profile)}
             >
               <span className="h-[7px] w-[7px] flex-none rounded-full bg-[#66788b]" />
-              <Server size={15} />
+              <Server size={16} />
               <span className="grid min-w-0 gap-0.5">
                 <strong>{profile.name}</strong>
                 <small className="overflow-hidden text-[10px] text-ellipsis text-[#7e95a8]">

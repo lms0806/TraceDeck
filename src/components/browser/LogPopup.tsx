@@ -145,7 +145,7 @@ export function LogPopup({ label }: { label: string }) {
   return (
     <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#0d141b] text-[#dce7f1]">
       <header className="flex h-10 shrink-0 items-center gap-2 border-b border-[#293d4d] px-3 text-xs text-[#ccdce7]">
-        <File size={15} className="shrink-0 text-[#74d6ac]" />
+        <File size={16} className="shrink-0 text-[#74d6ac]" />
         <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-mono">
           {log.path}
         </span>

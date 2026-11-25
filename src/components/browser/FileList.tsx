@@ -22,7 +22,7 @@ import type { RemoteEntry } from "./types";
 function FileTypeIcon({ name }: { name: string }) {
   const normalized = name.toLowerCase();
   const extension = normalized.split(".").pop() ?? "";
-  const iconProps = { "aria-hidden": true, size: 17 };
+  const iconProps = { "aria-hidden": true, size: 16 };
 
   if (
     normalized.endsWith(".log") ||
@@ -103,13 +103,13 @@ export function FileList({
           className="flex w-full gap-[7px] rounded bg-transparent p-2 text-left text-xs text-[#b8c8d4] hover:bg-[#243341]"
           onClick={() => onOpenDirectory(".")}
         >
-          <Folder size={15} /> 홈
+          <Folder size={16} /> 홈
         </button>
         <button
           className="flex w-full gap-[7px] rounded bg-transparent p-2 text-left text-xs text-[#b8c8d4] hover:bg-[#243341]"
           onClick={() => onOpenDirectory("/")}
         >
-          <HardDrive size={15} /> /
+          <HardDrive size={16} /> /
         </button>
         <p className="mx-[6px] my-[18px] text-[10px] leading-normal text-[#72899b]">
           목록은 변경된 경우에만 갱신됩니다.
@@ -137,7 +137,7 @@ export function FileList({
             title="상위 폴더"
           >
             <span>
-              <FolderUp className="text-[#e7bc66]" size={17} />
+              <FolderUp className="text-[#e7bc66]" size={16} />
               <b>..</b>
             </span>
             <small className="font-mono text-[10px] text-[#7c94a6]">
@@ -147,7 +147,7 @@ export function FileList({
         )}
         {loaded && !loading && entries.length === 0 && (
           <div className="grid min-h-[250px] place-content-center justify-items-center gap-[9px] p-[25px] text-center text-xs text-[#7e96a8] [&>strong]:text-[13px] [&>strong]:text-[#b9cad6] [&>svg]:text-[#5f8099]">
-            <FolderOpen size={34} />
+            <FolderOpen size={32} />
             <strong>폴더가 비어 있거나 읽을 수 없습니다.</strong>
           </div>
         )}
@@ -171,7 +171,7 @@ export function FileList({
           >
             <span>
               {entry.isDir ? (
-                <Folder className="text-[#e7bc66]" size={17} />
+                <Folder className="text-[#e7bc66]" size={16} />
               ) : (
                 <FileTypeIcon name={entry.name} />
               )}

@@ -244,7 +244,7 @@ export function LogDock({
                   key="split-log-tab"
                   title="분할 보기"
                 >
-                  <Columns2 size={15} />
+                  <Columns2 size={16} />
                   <span className="max-w-[280px] overflow-hidden text-ellipsis whitespace-nowrap">
                     {splitTabLabel ?? "분할 보기"}
                   </span>
@@ -291,7 +291,7 @@ export function LogDock({
                     setDropSide(null);
                   }}
                 >
-                  <File size={15} />
+                  <File size={16} />
                   <span className="max-w-[220px] overflow-hidden text-ellipsis whitespace-nowrap">
                     {log.path}
                   </span>

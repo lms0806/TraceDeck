@@ -171,7 +171,7 @@ export function TerminalDock({
               className="flex min-w-0 items-center gap-1 rounded px-2 py-1 text-[#9fb2c2] hover:bg-[#263746] hover:text-white"
               onClick={onShowLog}
             >
-              {isLogSplit ? <Columns2 size={15} /> : <File size={15} />}
+              {isLogSplit ? <Columns2 size={16} /> : <File size={16} />}
               <span className="max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap">
                 {logTabLabel ?? logPath}
               </span>
@@ -238,10 +238,10 @@ export function TerminalDock({
         </div>
         <div className="flex items-center gap-1">
           <IconButton aria-label="터미널 재연결" onClick={terminal.reconnect}>
-            <RefreshCw size={15} />
+            <RefreshCw size={16} />
           </IconButton>
           <IconButton aria-label="터미널 출력 지우기" onClick={terminal.clear}>
-            <Trash2 size={15} />
+            <Trash2 size={16} />
           </IconButton>
           <IconButton aria-label="터미널 닫기" onClick={onClose}>
             <X size={18} />

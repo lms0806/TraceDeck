@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { useLayoutEffect, useRef, useState, type PointerEvent } from "react";
-import { Columns2, ExternalLink, File, X } from "lucide-react";
+import { Columns2, File, PanelTopOpen, X } from "lucide-react";
 
 import { IconButton } from "../ui/IconButton";
 import type { LogTab } from "./useTailStream";
@@ -323,7 +323,7 @@ export function LogDock({
             onClick={() => onPopoutLog(preview.id)}
             title="새 창으로 열기"
           >
-            <ExternalLink size={16} />
+            <PanelTopOpen aria-hidden="true" size={16} />
           </IconButton>
         </div>
       </header>

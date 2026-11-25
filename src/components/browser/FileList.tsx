@@ -1,10 +1,14 @@
 import {
   File,
+  FilePlus,
   Folder,
   FolderOpen,
+  FolderPlus,
   FolderTree,
   FolderUp,
   HardDrive,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -141,43 +145,45 @@ export function FileList({
           {contextMenu.entry ? (
             <>
               <button
-                className="w-full rounded px-2.5 py-2 text-left text-xs text-[#d6e4ed] hover:bg-[#294052]"
+                className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-xs text-[#d6e4ed] hover:bg-[#294052]"
                 onClick={() => {
                   onRenameEntry(contextMenu.entry!);
                   setContextMenu(null);
                 }}
               >
+                <Pencil aria-hidden="true" size={14} />
                 이름 변경
               </button>
               <button
-                className="w-full rounded px-2.5 py-2 text-left text-xs text-[#ffaaa5] hover:bg-[#41272a]"
+                className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-xs text-[#ffaaa5] hover:bg-[#41272a]"
                 onClick={() => {
                   onDeleteEntry(contextMenu.entry!);
                   setContextMenu(null);
                 }}
               >
+                <Trash2 aria-hidden="true" size={14} />
                 삭제
               </button>
             </>
           ) : (
             <>
               <button
-                className="w-full rounded px-2.5 py-2 text-left text-xs text-[#d6e4ed] hover:bg-[#294052]"
+                className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-xs text-[#d6e4ed] hover:bg-[#294052]"
                 onClick={() => {
                   onCreateFile();
                   setContextMenu(null);
                 }}
               >
-                새 파일
+                <FilePlus aria-hidden="true" size={14} />새 파일
               </button>
               <button
-                className="w-full rounded px-2.5 py-2 text-left text-xs text-[#d6e4ed] hover:bg-[#294052]"
+                className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-xs text-[#d6e4ed] hover:bg-[#294052]"
                 onClick={() => {
                   onCreateDirectory();
                   setContextMenu(null);
                 }}
               >
-                새 폴더
+                <FolderPlus aria-hidden="true" size={14} />새 폴더
               </button>
             </>
           )}

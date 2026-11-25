@@ -1,6 +1,11 @@
 import {
   File,
+  FileArchive,
+  FileCode2,
+  FileJson,
+  FileKey,
   FilePlus,
+  FileText,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -13,6 +18,46 @@ import {
 import { useState } from "react";
 
 import type { RemoteEntry } from "./types";
+
+function FileTypeIcon({ name }: { name: string }) {
+  const normalized = name.toLowerCase();
+  const extension = normalized.split(".").pop() ?? "";
+  const iconProps = { "aria-hidden": true, size: 17 };
+
+  if (
+    normalized.endsWith(".log") ||
+    /\.log\.\d+$/.test(normalized) ||
+    ["txt", "md", "out", "err"].includes(extension)
+  )
+    return <FileText {...iconProps} className="text-[#78b8ff]" />;
+  if (["json", "jsonc", "json5"].includes(extension))
+    return <FileJson {...iconProps} className="text-[#e9c46a]" />;
+  if (
+    [
+      "rs",
+      "ts",
+      "tsx",
+      "js",
+      "jsx",
+      "mjs",
+      "cjs",
+      "css",
+      "html",
+      "htm",
+      "yml",
+      "yaml",
+      "toml",
+      "xml",
+      "sh",
+    ].includes(extension)
+  )
+    return <FileCode2 {...iconProps} className="text-[#d2a8ff]" />;
+  if (["zip", "tar", "gz", "bz2", "xz", "7z", "rar"].includes(extension))
+    return <FileArchive {...iconProps} className="text-[#e7bc66]" />;
+  if (["key", "pem", "pub", "ppk", "p12", "pfx"].includes(extension))
+    return <FileKey {...iconProps} className="text-[#72d4de]" />;
+  return <File {...iconProps} />;
+}
 
 export function FileList({
   entries,
@@ -128,7 +173,7 @@ export function FileList({
               {entry.isDir ? (
                 <Folder className="text-[#e7bc66]" size={17} />
               ) : (
-                <File size={17} />
+                <FileTypeIcon name={entry.name} />
               )}
               <b>{entry.name}</b>
             </span>

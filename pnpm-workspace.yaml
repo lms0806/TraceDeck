@@ -19,9 +19,9 @@ minimumReleaseAgeExclude:
   - '@tauri-apps/cli-win32-ia32-msvc@2.12.6'
   - '@tauri-apps/cli-win32-x64-msvc@2.12.6'
   - '@tauri-apps/cli@2.12.6'
-  - '@vitest/mocker@5.1.1'
-  - '@vitest/spy@5.1.1'
-  - vitest@5.1.1
+  - '@vitest/mocker@5.1.2'
+  - '@vitest/spy@5.1.2'
+  - vitest@5.1.2
   - '@typescript-eslint/eslint-plugin@8.74.0'
   - '@typescript-eslint/parser@8.74.0'
   - '@typescript-eslint/project-service@8.74.0'

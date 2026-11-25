@@ -1,6 +1,12 @@
 import type { CSSProperties } from "react";
-import { useLayoutEffect, useRef, useState, type PointerEvent } from "react";
-import { Columns2, File, PanelTopOpen, X } from "lucide-react";
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent,
+} from "react";
+import { Columns2, File, PanelTopOpen, Search, X } from "lucide-react";
 
 import { IconButton } from "../ui/IconButton";
 import type { LogTab } from "./useTailStream";
@@ -23,6 +29,100 @@ const ansiPalette: Record<number, string> = {
   96: "#8de8ed",
   97: "#ffffff",
 };
+
+export type LogLevelFilter = "all" | "info" | "warn" | "error";
+
+function withoutAnsi(value: string) {
+  // eslint-disable-next-line no-control-regex -- ANSI SGR sequences from terminal output.
+  return value.replace(/\u001b\[[0-9;]*m/g, "");
+}
+
+export function filterLogContent(
+  content: string,
+  query: string,
+  level: LogLevelFilter,
+) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const levelPattern =
+    level === "info"
+      ? /\bINFO\b/i
+      : level === "warn"
+        ? /\bWARN(?:ING)?\b/i
+        : level === "error"
+          ? /\bERROR\b/i
+          : null;
+  return content
+    .split("\n")
+    .filter((line) => {
+      const plainLine = withoutAnsi(line);
+      return (
+        (levelPattern === null || levelPattern.test(plainLine)) &&
+        (normalizedQuery.length === 0 ||
+          plainLine.toLowerCase().includes(normalizedQuery))
+      );
+    })
+    .join("\n");
+}
+
+export function LogFilterBar({
+  query,
+  level,
+  onQueryChange,
+  onLevelChange,
+}: {
+  query: string;
+  level: LogLevelFilter;
+  onQueryChange: (query: string) => void;
+  onLevelChange: (level: LogLevelFilter) => void;
+}) {
+  const levels: { id: LogLevelFilter; label: string }[] = [
+    { id: "all", label: "전체" },
+    { id: "info", label: "INFO" },
+    { id: "warn", label: "WARN" },
+    { id: "error", label: "ERROR" },
+  ];
+
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <label className="flex min-w-0 flex-1 items-center gap-1.5 rounded border border-[#344b5c] bg-[#101820] px-2 py-1 text-[#89a1b2]">
+        <Search aria-hidden="true" size={13} />
+        <input
+          aria-label="로그 검색"
+          className="min-w-0 flex-1 border-0 bg-transparent font-sans text-[11px] text-[#dce7f1] outline-none placeholder:text-[#667f91]"
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder="로그 검색"
+          value={query}
+        />
+        {query.length > 0 && (
+          <button
+            aria-label="로그 검색 지우기"
+            className="rounded p-0.5 hover:bg-[#293d4d]"
+            onClick={() => onQueryChange("")}
+            type="button"
+          >
+            <X size={12} />
+          </button>
+        )}
+      </label>
+      <div className="flex shrink-0 rounded border border-[#344b5c] p-0.5">
+        {levels.map((item) => (
+          <button
+            className={`rounded px-1.5 py-1 text-[10px] font-semibold transition-colors ${
+              level === item.id
+                ? "bg-[#225b49] text-[#c5f7df]"
+                : "text-[#90a7b8] hover:bg-[#293d4d] hover:text-[#dce7f1]"
+            }`}
+            key={item.id}
+            onClick={() => onLevelChange(item.id)}
+            type="button"
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function AnsiLogContent({ content }: { content: string }) {
   return (
@@ -73,6 +173,12 @@ function LogPreview({ log }: { log: LogTab }) {
   const previewScroll = useRef<HTMLPreElement>(null);
   const stickToBottom = useRef(true);
   const autoScrolling = useRef(false);
+  const [query, setQuery] = useState("");
+  const [level, setLevel] = useState<LogLevelFilter>("all");
+  const filteredContent = useMemo(
+    () => filterLogContent(log.content, query, level),
+    [level, log.content, query],
+  );
 
   useLayoutEffect(() => {
     if (!stickToBottom.current) return;
@@ -85,12 +191,20 @@ function LogPreview({ log }: { log: LogTab }) {
       autoScrolling.current = false;
     });
     return () => cancelAnimationFrame(frame);
-  }, [log.content]);
+  }, [filteredContent]);
 
   return (
     <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
-      <div className="shrink-0 border-b border-[#293d4d] px-3 py-1.5 font-mono text-[10px] text-[#89a1b2]">
-        {log.path}
+      <div className="flex shrink-0 items-center gap-3 border-b border-[#293d4d] px-3 py-1.5">
+        <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px] text-[#89a1b2]">
+          {log.path}
+        </span>
+        <LogFilterBar
+          level={level}
+          onLevelChange={setLevel}
+          onQueryChange={setQuery}
+          query={query}
+        />
       </div>
       <pre
         className="m-0 min-h-0 flex-1 overflow-auto p-[12px_16px] font-mono text-xs leading-[1.55] whitespace-pre-wrap text-[#d0e0ec]"
@@ -103,7 +217,11 @@ function LogPreview({ log }: { log: LogTab }) {
             24;
         }}
       >
-        <AnsiLogContent content={log.content} />
+        {filteredContent.length > 0 ? (
+          <AnsiLogContent content={filteredContent} />
+        ) : (
+          <span className="text-[#71899b]">일치하는 로그가 없습니다.</span>
+        )}
       </pre>
     </section>
   );

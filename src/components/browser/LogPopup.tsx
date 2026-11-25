@@ -3,7 +3,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { File } from "lucide-react";
 
-import { AnsiLogContent } from "./LogDock";
+import {
+  AnsiLogContent,
+  filterLogContent,
+  LogFilterBar,
+  type LogLevelFilter,
+} from "./LogDock";
 import type { Profile, TailChunk } from "./types";
 
 export interface LogPopupSnapshot {
@@ -29,6 +34,8 @@ export function LogPopup({ label }: { label: string }) {
   const [streamState, setStreamState] = useState<
     "connecting" | "tracking" | "failed"
   >("connecting");
+  const [query, setQuery] = useState("");
+  const [level, setLevel] = useState<LogLevelFilter>("all");
   const scrollRef = useRef<HTMLPreElement>(null);
   const streamId = useRef<number | null>(null);
   const starting = useRef(false);
@@ -140,7 +147,9 @@ export function LogPopup({ label }: { label: string }) {
   useLayoutEffect(() => {
     const element = scrollRef.current;
     if (element) element.scrollTop = element.scrollHeight;
-  }, [log.content]);
+  }, [log.content, query, level]);
+
+  const filteredContent = filterLogContent(log.content, query, level);
 
   return (
     <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#0d141b] text-[#dce7f1]">
@@ -157,11 +166,23 @@ export function LogPopup({ label }: { label: string }) {
               : "연결 실패"}
         </small>
       </header>
+      <div className="shrink-0 border-b border-[#293d4d] px-3 py-1.5">
+        <LogFilterBar
+          level={level}
+          onLevelChange={setLevel}
+          onQueryChange={setQuery}
+          query={query}
+        />
+      </div>
       <pre
         className="m-0 min-h-0 flex-1 overflow-auto p-[12px_16px] font-mono text-xs leading-[1.55] whitespace-pre-wrap text-[#d0e0ec]"
         ref={scrollRef}
       >
-        <AnsiLogContent content={log.content} />
+        {filteredContent.length > 0 ? (
+          <AnsiLogContent content={filteredContent} />
+        ) : (
+          <span className="text-[#71899b]">일치하는 로그가 없습니다.</span>
+        )}
       </pre>
     </main>
   );

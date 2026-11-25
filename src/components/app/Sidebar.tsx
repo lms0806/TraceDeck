@@ -1,9 +1,9 @@
 import { useState } from "react";
 import {
+  AppWindowPlus,
   ChartNoAxesCombined,
   FolderOpen,
   MonitorCog,
-  Plus,
   Search,
   Server,
   X,
@@ -52,10 +52,12 @@ export function Sidebar({
       <div className="mx-2 mb-2 mt-5 flex items-center justify-between text-[10px] font-[750] tracking-[1px] text-[#7790a5]">
         <span>SAVED SESSIONS</span>
         <button
+          aria-label="새 세션 만들기"
           className="border-0 bg-transparent p-px text-[#92a9ba]"
           onClick={onNewSession}
+          title="새 세션 만들기"
         >
-          <Plus size={15} />
+          <AppWindowPlus aria-hidden="true" size={15} />
         </button>
       </div>
       <div className="overflow-auto">

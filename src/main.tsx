@@ -3,7 +3,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { CircleDot, FolderOpen, KeyRound, Plus, X } from "lucide-react";
+import {
+  AppWindowPlus,
+  CircleDot,
+  FolderOpen,
+  KeyRound,
+  X,
+} from "lucide-react";
 import "./styles.css";
 import { Browser } from "./components/Browser";
 import { LogPopup } from "./components/browser/LogPopup";
@@ -208,7 +214,7 @@ function App() {
             setDialog(true);
           }}
         >
-          <Plus size={16} /> 새 세션
+          <AppWindowPlus aria-hidden="true" size={16} /> 새 세션
         </PrimaryButton>
       </header>
       <Sidebar

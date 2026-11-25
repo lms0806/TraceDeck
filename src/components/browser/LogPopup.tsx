@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { File } from "lucide-react";
 
 import { AnsiLogContent } from "./LogDock";
@@ -85,6 +84,11 @@ export function LogPopup({ label }: { label: string }) {
       }
     }
 
+    const handleUnload = () => {
+      void stopStream();
+    };
+    window.addEventListener("beforeunload", handleUnload);
+
     void Promise.all([
       listen<LogPopupSnapshot>("log-popup-snapshot", (event) => {
         void startStream(event.payload);
@@ -103,7 +107,6 @@ export function LogPopup({ label }: { label: string }) {
           );
         }
       }),
-      getCurrentWindow().onCloseRequested(() => stopStream()),
     ]).then((stops) => {
       if (disposed) stops.forEach((stop) => stop());
       else {
@@ -114,6 +117,7 @@ export function LogPopup({ label }: { label: string }) {
 
     return () => {
       disposed = true;
+      window.removeEventListener("beforeunload", handleUnload);
       unlisteners.forEach((stop) => stop());
       void stopStream();
     };

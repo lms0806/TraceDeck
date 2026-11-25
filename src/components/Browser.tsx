@@ -195,6 +195,10 @@ export function Browser({
                 terminal={terminal}
                 expanded
                 onClose={() => setView("files")}
+                onToggleExpanded={() => {
+                  setView("files");
+                  setShowTerminalDock(true);
+                }}
                 terminalTabs={terminals.sessions}
                 activeTerminalKey={terminals.activeKey}
                 onSelectTerminal={terminals.setActiveKey}
@@ -258,6 +262,10 @@ export function Browser({
                   key={terminals.activeKey}
                   terminal={terminal}
                   onClose={() => setShowTerminalDock(false)}
+                  onToggleExpanded={() => {
+                    setShowTerminalDock(false);
+                    setView("terminal");
+                  }}
                   logPath={tail.activeLog?.path}
                   logTabLabel={logTabLabel}
                   isLogSplit={hasLogSplit}

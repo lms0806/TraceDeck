@@ -1,9 +1,13 @@
-import { useEffect, useRef, type PointerEvent } from "react";
+import { useCallback, useEffect, useRef, type PointerEvent } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as Xterm } from "@xterm/xterm";
 import {
   Columns2,
+  ClipboardPaste,
+  Copy,
   File,
+  Maximize2,
+  Minimize2,
   Plus,
   RefreshCw,
   Terminal,
@@ -25,6 +29,7 @@ export function TerminalDock({
   height,
   onHeightChange,
   expanded = false,
+  onToggleExpanded,
   terminalTabs,
   activeTerminalKey,
   onSelectTerminal,
@@ -40,6 +45,7 @@ export function TerminalDock({
   height?: number;
   onHeightChange?: (height: number) => void;
   expanded?: boolean;
+  onToggleExpanded?: () => void;
   terminalTabs?: TerminalTab[];
   activeTerminalKey?: number | null;
   onSelectTerminal?: (key: number) => void;
@@ -54,6 +60,25 @@ export function TerminalDock({
   useEffect(() => {
     terminalRef.current = terminal;
   }, [terminal]);
+
+  const copySelection = useCallback(async () => {
+    const selection = xtermRef.current?.getSelection();
+    if (selection === undefined || selection.length === 0) return;
+    try {
+      await navigator.clipboard.writeText(selection);
+    } catch {
+      // Keep terminal input responsive when the WebView clipboard is unavailable.
+    }
+  }, []);
+
+  const pasteClipboard = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) await terminalRef.current.write(text);
+    } catch {
+      // Keep terminal input responsive when the WebView clipboard is unavailable.
+    }
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -87,25 +112,16 @@ export function TerminalDock({
     const inputSubscription = xterm.onData((input) => {
       void terminalRef.current.write(input);
     });
-    const copySelection = () => {
-      const selection = xterm.getSelection();
-      if (selection) void navigator.clipboard.writeText(selection);
-    };
-    const pasteClipboard = () => {
-      void navigator.clipboard.readText().then((text) => {
-        if (text) return terminalRef.current.write(text);
-      });
-    };
     const handleClipboardShortcut = (event: KeyboardEvent) => {
       if (!event.ctrlKey && !event.metaKey) return;
       const key = event.key.toLowerCase();
       if (key === "c" && xterm.hasSelection()) {
         event.preventDefault();
-        copySelection();
+        void copySelection();
       }
       if (key === "v") {
         event.preventDefault();
-        pasteClipboard();
+        void pasteClipboard();
       }
     };
     container.addEventListener("keydown", handleClipboardShortcut, true);
@@ -116,7 +132,7 @@ export function TerminalDock({
       xterm.dispose();
       xtermRef.current = null;
     };
-  }, []);
+  }, [copySelection, pasteClipboard]);
 
   useEffect(() => {
     const xterm = xtermRef.current;
@@ -237,6 +253,31 @@ export function TerminalDock({
           )}
         </div>
         <div className="flex items-center gap-1">
+          <IconButton
+            aria-label="터미널 선택 영역 복사"
+            onClick={() => void copySelection()}
+            title="선택 영역 복사"
+          >
+            <Copy size={16} />
+          </IconButton>
+          <IconButton
+            aria-label="클립보드 내용을 터미널에 붙여넣기"
+            onClick={() => void pasteClipboard()}
+            title="클립보드 붙여넣기"
+          >
+            <ClipboardPaste size={16} />
+          </IconButton>
+          {onToggleExpanded !== undefined && (
+            <IconButton
+              aria-label={
+                expanded ? "터미널 분할 화면으로 복귀" : "터미널 전체 화면"
+              }
+              onClick={onToggleExpanded}
+              title={expanded ? "분할 화면으로 복귀" : "전체 화면"}
+            >
+              {expanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            </IconButton>
+          )}
           <IconButton aria-label="터미널 재연결" onClick={terminal.reconnect}>
             <RefreshCw size={16} />
           </IconButton>

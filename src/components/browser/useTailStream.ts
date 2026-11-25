@@ -17,6 +17,8 @@ export function useTailStream(profile: Profile) {
   const logsRef = useRef<LogTab[]>([]);
   const streamLogs = useRef(new Map<number, string>());
   const bufferedChunks = useRef(new Map<number, string>());
+  const pendingChunks = useRef(new Map<string, string>());
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const popupLabels = useRef(new Map<string, string>());
 
   useEffect(() => {
@@ -25,6 +27,23 @@ export function useTailStream(profile: Profile) {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    const chunks = pendingChunks.current;
+
+    function flushPendingChunks() {
+      flushTimer.current = null;
+      if (chunks.size === 0) return;
+      const pending = new Map(chunks);
+      chunks.clear();
+      setLogs((current) =>
+        current.map((log) => {
+          const chunk = pending.get(log.id);
+          if (chunk === undefined) return log;
+          const lines = `${log.content}${chunk}`.split("\n");
+          return { ...log, content: lines.slice(-2_000).join("\n") };
+        }),
+      );
+    }
+
     void listen<TailChunk>("tail-chunk", (event) => {
       const logId = streamLogs.current.get(event.payload.streamId);
       if (logId === undefined) {
@@ -36,17 +55,18 @@ export function useTailStream(profile: Profile) {
         );
         return;
       }
-      setLogs((current) =>
-        current.map((log) => {
-          if (log.id !== logId) return log;
-          const lines = `${log.content}${event.payload.chunk}`.split("\n");
-          return { ...log, content: lines.slice(-2_000).join("\n") };
-        }),
-      );
+      const previous = chunks.get(logId) ?? "";
+      chunks.set(logId, `${previous}${event.payload.chunk}`.slice(-200_000));
+      flushTimer.current ??= setTimeout(flushPendingChunks, 50);
     }).then((stop) => {
       unlisten = stop;
     });
-    return () => unlisten?.();
+    return () => {
+      unlisten?.();
+      if (flushTimer.current !== null) clearTimeout(flushTimer.current);
+      flushTimer.current = null;
+      chunks.clear();
+    };
   }, []);
 
   useEffect(() => {
@@ -146,6 +166,7 @@ export function useTailStream(profile: Profile) {
       bufferedChunks.current.delete(streamId);
       void invoke("stop_tail_stream", { streamId });
     }
+    pendingChunks.current.delete(id);
     const popupLabel = popupLabels.current.get(id);
     if (popupLabel !== undefined) {
       popupLabels.current.delete(id);

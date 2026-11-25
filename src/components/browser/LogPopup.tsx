@@ -34,18 +34,29 @@ export function LogPopup({ label }: { label: string }) {
   const starting = useRef(false);
   const bufferedChunks = useRef(new Map<number, string>());
   const receivedOwnChunk = useRef(false);
+  const pendingChunk = useRef("");
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const unlisteners: (() => void)[] = [];
     let disposed = false;
 
-    function appendChunk(chunk: string) {
+    function flushPendingChunk() {
+      flushTimer.current = null;
+      const chunk = pendingChunk.current;
+      pendingChunk.current = "";
+      if (chunk.length === 0) return;
       setLog((current) => {
         const previous = receivedOwnChunk.current ? current.content : "";
         receivedOwnChunk.current = true;
         const lines = `${previous}${chunk}`.split("\n");
         return { ...current, content: lines.slice(-2_000).join("\n") };
       });
+    }
+
+    function appendChunk(chunk: string) {
+      pendingChunk.current = `${pendingChunk.current}${chunk}`.slice(-200_000);
+      flushTimer.current ??= setTimeout(flushPendingChunk, 50);
     }
 
     async function stopStream() {
@@ -119,6 +130,9 @@ export function LogPopup({ label }: { label: string }) {
       disposed = true;
       window.removeEventListener("beforeunload", handleUnload);
       unlisteners.forEach((stop) => stop());
+      if (flushTimer.current !== null) clearTimeout(flushTimer.current);
+      flushTimer.current = null;
+      pendingChunk.current = "";
       void stopStream();
     };
   }, [label]);

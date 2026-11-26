@@ -34,5 +34,6 @@ minimumReleaseAgeExclude:
   - '@typescript-eslint/visitor-keys@8.74.0'
   - typescript-eslint@8.74.0
   - '@types/react@19.3.3'
+  - vite@8.4.0
 
 minimumReleaseAgeExcludePrune: true

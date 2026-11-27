@@ -32,6 +32,7 @@ export function Browser({
   active,
   onCheck,
   notify,
+  onCloseSession,
   workspace,
   onWorkspaceChange,
 }: {
@@ -39,6 +40,7 @@ export function Browser({
   active: boolean;
   onCheck: () => void;
   notify: (text: string) => void;
+  onCloseSession: () => void;
   workspace?: BrowserWorkspace;
   onWorkspaceChange: (workspace: BrowserWorkspace) => void;
 }) {
@@ -81,6 +83,25 @@ export function Browser({
       setShowTerminalDock(false);
     }
   }
+
+  useEffect(() => {
+    if (!active) return;
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "t") {
+        event.preventDefault();
+        setView("files");
+        setShowTerminalDock(true);
+        return;
+      }
+      if (event.ctrlKey && event.key.toLowerCase() === "w") {
+        event.preventDefault();
+        if (tail.activeLog !== null) tail.closeLog(tail.activeLog.id);
+        else onCloseSession();
+      }
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [active, onCloseSession, tail]);
 
   useEffect(() => {
     onWorkspaceChange({

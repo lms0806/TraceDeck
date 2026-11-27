@@ -36,6 +36,7 @@ export function LogPopup({ label }: { label: string }) {
   >("connecting");
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState<LogLevelFilter>("all");
+  const searchInput = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLPreElement>(null);
   const streamId = useRef<number | null>(null);
   const starting = useRef(false);
@@ -149,6 +150,17 @@ export function LogPopup({ label }: { label: string }) {
     if (element) element.scrollTop = element.scrollHeight;
   }, [log.content, query, level]);
 
+  useEffect(() => {
+    const focusSearch = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || event.key.toLowerCase() !== "f") return;
+      event.preventDefault();
+      searchInput.current?.focus();
+      searchInput.current?.select();
+    };
+    window.addEventListener("keydown", focusSearch);
+    return () => window.removeEventListener("keydown", focusSearch);
+  }, []);
+
   const filteredContent = filterLogContent(log.content, query, level);
 
   return (
@@ -172,6 +184,7 @@ export function LogPopup({ label }: { label: string }) {
           onLevelChange={setLevel}
           onQueryChange={setQuery}
           query={query}
+          inputRef={searchInput}
         />
       </div>
       <pre

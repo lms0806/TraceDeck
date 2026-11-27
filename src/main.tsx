@@ -256,6 +256,7 @@ function App() {
                   profile={profile}
                   active={tab.id === activeId}
                   onCheck={() => void check(profile)}
+                  onCloseSession={() => closeSession(tab.id)}
                   notify={setNotice}
                   workspace={browserWorkspaces[profile.id]}
                   onWorkspaceChange={(workspace) =>

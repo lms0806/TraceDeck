@@ -1,10 +1,12 @@
 import type { CSSProperties } from "react";
 import {
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type PointerEvent,
+  type RefObject,
 } from "react";
 import { Columns2, File, PanelTopOpen, Search, X } from "lucide-react";
 
@@ -69,11 +71,13 @@ export function LogFilterBar({
   level,
   onQueryChange,
   onLevelChange,
+  inputRef,
 }: {
   query: string;
   level: LogLevelFilter;
   onQueryChange: (query: string) => void;
   onLevelChange: (level: LogLevelFilter) => void;
+  inputRef?: RefObject<HTMLInputElement | null>;
 }) {
   const levels: { id: LogLevelFilter; label: string }[] = [
     { id: "all", label: "전체" },
@@ -91,6 +95,7 @@ export function LogFilterBar({
           className="min-w-0 flex-1 border-0 bg-transparent font-sans text-[11px] text-[#dce7f1] outline-none placeholder:text-[#667f91]"
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder="로그 검색"
+          ref={inputRef}
           value={query}
         />
         {query.length > 0 && (
@@ -169,12 +174,19 @@ export function AnsiLogContent({ content }: { content: string }) {
   );
 }
 
-function LogPreview({ log }: { log: LogTab }) {
+function LogPreview({
+  log,
+  focusOnShortcut = true,
+}: {
+  log: LogTab;
+  focusOnShortcut?: boolean;
+}) {
   const previewScroll = useRef<HTMLPreElement>(null);
   const stickToBottom = useRef(true);
   const autoScrolling = useRef(false);
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState<LogLevelFilter>("all");
+  const searchInput = useRef<HTMLInputElement>(null);
   const filteredContent = useMemo(
     () => filterLogContent(log.content, query, level),
     [level, log.content, query],
@@ -193,6 +205,18 @@ function LogPreview({ log }: { log: LogTab }) {
     return () => cancelAnimationFrame(frame);
   }, [filteredContent]);
 
+  useEffect(() => {
+    if (!focusOnShortcut) return;
+    const focusSearch = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || event.key.toLowerCase() !== "f") return;
+      event.preventDefault();
+      searchInput.current?.focus();
+      searchInput.current?.select();
+    };
+    window.addEventListener("keydown", focusSearch);
+    return () => window.removeEventListener("keydown", focusSearch);
+  }, [focusOnShortcut]);
+
   return (
     <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 items-center gap-3 border-b border-[#293d4d] px-3 py-1.5">
@@ -204,6 +228,7 @@ function LogPreview({ log }: { log: LogTab }) {
           onLevelChange={setLevel}
           onQueryChange={setQuery}
           query={query}
+          inputRef={searchInput}
         />
       </div>
       <pre
@@ -447,9 +472,17 @@ export function LogDock({
       </header>
       {splitLogs?.length === 2 ? (
         <div className="flex min-h-0 flex-1">
-          <LogPreview key={splitLogs[0].id} log={splitLogs[0]} />
+          <LogPreview
+            focusOnShortcut={splitLogs[0].id === activeLogId}
+            key={splitLogs[0].id}
+            log={splitLogs[0]}
+          />
           <div className="w-px shrink-0 bg-[#3a5264]" />
-          <LogPreview key={splitLogs[1].id} log={splitLogs[1]} />
+          <LogPreview
+            focusOnShortcut={splitLogs[1].id === activeLogId}
+            key={splitLogs[1].id}
+            log={splitLogs[1]}
+          />
         </div>
       ) : (
         <LogPreview key={preview.id} log={preview} />

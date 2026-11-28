@@ -6,7 +6,7 @@ overrides:
 minimumReleaseAgeExclude:
   - knip@6.49.0
   - lucide-react@1.83.0
-  - '@tauri-apps/api@2.12.5'
+  - '@tauri-apps/api@2.13.0'
   - '@tauri-apps/cli-darwin-arm64@2.12.6'
   - '@tauri-apps/cli-darwin-x64@2.12.6'
   - '@tauri-apps/cli-linux-arm-gnueabihf@2.12.6'

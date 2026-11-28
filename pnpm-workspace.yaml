@@ -4,7 +4,7 @@ overrides:
   minimatch: ^11.0.3
 
 minimumReleaseAgeExclude:
-  - knip@6.48.0
+  - knip@6.49.0
   - lucide-react@1.82.0
   - '@tauri-apps/api@2.12.5'
   - '@tauri-apps/cli-darwin-arm64@2.12.6'
